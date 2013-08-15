@@ -115,7 +115,7 @@ static struct fileinfo *sort_hashes(void) {
 
 	infos = mmap(NULL,filecount*sizeof*infos,PROT_READ|PROT_WRITE,MAP_SHARED,fd,0);
 	if (infos == MAP_FAILED) {
-		perror("Cannot map fdup.hashes");
+		perror("Cannot map temporary file in sort_hashes");
 		return NULL;
 	}
 
@@ -133,7 +133,7 @@ static int UNUSED print_files(struct fileinfo *infos) {
 
 	filenames = mmap(NULL,ftell(names),PROT_READ,MAP_SHARED,fd,0);
 	if (filenames == MAP_FAILED) {
-		perror("Cannot map fdup.names");
+		perror("Cannot map temporary file in print_files");
 		return 0;
 	}
 
@@ -154,7 +154,7 @@ static int UNUSED print_dups(const struct fileinfo *infos) {
 
 	filenames = mmap(NULL,ftell(names),PROT_READ,MAP_SHARED,fd,0);
 	if (filenames == MAP_FAILED) {
-		perror("Cannot map fdup.names");
+		perror("Cannot map temporary file in print_dups");
 		return 0;
 	}
 
@@ -197,15 +197,15 @@ int main(int argc, char *argv[]) {
 		return 2;
 	}
 
-	names = fopen("fdup.names","w+b");
+	names = tmpfile();
 	if (names == NULL) {
-		perror("Cannot open fdup.names");
+		perror("Cannot create temporary file");
 		return 1;
 	}
 
-	hashes = fopen("fdup.hashes","w+b");
+	hashes = tmpfile();
 	if (hashes == NULL) {
-		perror("Cannot open fdup.hashes");
+		perror("Cannot create temporary file");
 		return 1;
 	}
 

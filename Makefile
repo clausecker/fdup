@@ -23,6 +23,7 @@
 
 LDLIBS=-lcrypto
 CFLAGS=-O3 -Wall -Wextra -pedantic -std=c1x -g
+NROFF=nroff
 
 all: fdup
 
@@ -30,3 +31,6 @@ all: fdup
 
 clean:
 	$(RM) *.o *.s fdup
+
+README: fdup.1
+	$(NROFF) -man fdup.1 | col -bx >$@

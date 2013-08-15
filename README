@@ -1,0 +1,46 @@
+fdup(1)                          User manuals                          fdup(1)
+
+
+
+NAME
+       fdup - find duplicates
+
+
+SYNOPSIS
+       fdup directory...
+
+
+DESCRIPTION
+       fdup  traverses the supplied directories and finds file with equal con‐
+       tent. fdup then  prints  files  that  were  found  to  have  duplicates
+       linewise  to  standard  output.  Groups of equal files are separated by
+       blank lines.
+
+       fdup outputs statistics to stderr(3) while processing files. fdup  will
+       not follow symbolic links it encounters.
+
+
+OPTIONS
+       none
+
+
+BUGS
+       The program is quite slow as it needs to read every file it encounters.
+       Future versions of this program will employ smartes techniques to  com‐
+       pare  files. fdup lacks configurability and options. Future version are
+       going to have command line options.
+
+       Please file bugs at <https://github.com/fuzxxl/fdup/issues>.
+
+
+COPYRIGHT
+       This program, its source code and this  manpage  is  licensed  under  a
+       2-clause BSD license. See file COPYING for details.
+
+
+AUTHOR
+       Written by Robert Clausecker <fuzxxl@gmail.com>.
+
+
+
+Robert Clausecker                 August 2013                          fdup(1)

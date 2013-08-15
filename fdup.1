@@ -1,0 +1,31 @@
+.TH fdup 1 "August 2013" "Robert Clausecker" "User manuals"
+
+.SH NAME
+fdup \- find duplicates
+
+.SH SYNOPSIS
+.B fdup
+.IR directory ...
+
+.SH DESCRIPTION
+fdup traverses the supplied directories and finds file with equal content. fdup
+then prints files that were found to have duplicates linewise to standard
+output. Groups of equal files are separated by blank lines.
+
+fdup outputs statistics to
+.BR stderr (3)
+while processing files. fdup will not follow symbolic links it encounters.
+
+.SH OPTIONS
+none
+
+.SH BUGS
+The program is quite slow as it needs to read every file it encounters. Future
+versions of this program will employ smartes techniques to compare files. fdup
+lacks configurability and options. Future version are going to have command
+line options.
+
+Please file bugs at <https://github.com/fuzxxl/fdup/issues>.
+
+.SH AUTHOR
+Written by Robert Clausecker <fuzxxl@gmail.com>.

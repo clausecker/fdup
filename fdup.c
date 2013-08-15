@@ -124,7 +124,7 @@ static struct fileinfo *sort_hashes(void) {
 	return infos;
 }
 
-static int print_files(struct fileinfo *infos) {
+static int UNUSED print_files(struct fileinfo *infos) {
 	int fd, i;
 	const char *filenames;
 	char digest[2*SHA_DIGEST_LENGTH+1];
@@ -140,6 +140,43 @@ static int print_files(struct fileinfo *infos) {
 	for(i = 0; i < filecount; i++) {
 		sha1_to_string(digest,infos[i].hash);
 		printf("%40s %s\n",digest,filenames+infos[i].path);
+	}
+
+	return 1;
+}
+
+static int UNUSED print_dups(const struct fileinfo *infos) {
+	int fd, i;
+	bool odup = false, ndup, first = true;
+	const char *filenames;
+
+	fd = fileno(names);
+
+	filenames = mmap(NULL,ftell(names),PROT_READ,MAP_SHARED,fd,0);
+	if (filenames == MAP_FAILED) {
+		perror("Cannot map fdup.names");
+		return 0;
+	}
+
+	if (filecount < 2) return 1;
+
+	for(i = 1; i < filecount; i++) {
+		ndup = cmp_fileinfo(&infos[i-1],&infos[i]) == 0;
+
+		if (ndup && !odup && !first) {
+			puts("");
+		}
+
+		if (ndup || odup) {
+			first = false;
+			puts(filenames+infos[i-1].path);
+		}
+
+		odup = ndup;
+	}
+
+	if (odup) {
+		printf("%s\n",filenames+infos[filecount-1].path);
 	}
 
 	return 1;
@@ -195,7 +232,8 @@ int main(int argc, char *argv[]) {
 	infos = sort_hashes();
 	if (infos == NULL) return 1;
 
-	ok = print_files(infos);
+	/* ok = print_files(infos); */
+	ok = print_dups(infos);
 
 	if (!ok) return 1;
 

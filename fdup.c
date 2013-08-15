@@ -1,11 +1,12 @@
 #define _XOPEN_SOURCE 500
-#define _GNU_SOURCE
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +20,7 @@
 # define __has_attribute(x) 0
 #endif
 
+/* this macro surpresses warnings that something is unused */
 #if defined(__GNUC__) || __has_attribute(unused)
 # define UNUSED __attribute__((unused))
 #else
@@ -35,6 +37,7 @@ static const char hextab[16] = "0123456789abcdef";
 static FILE *names;
 static FILE *hashes;
 static int filecount = 0;
+static size_t bytecount = 0;
 
 static void sha1_to_string(
 	char out[2*SHA_DIGEST_LENGTH+1],
@@ -64,6 +67,7 @@ static int file_sha1(unsigned char hash[20], const char *filepath) {
 	SHA1_Init(&sha);
 
 	while ((count = read(fd,buf,BUFSIZE)) > 0) {
+		bytecount += count;
 		SHA1_Update(&sha,buf,count);
 	}
 
@@ -93,15 +97,13 @@ static int print_walker(
 	fwrite(fpath,sizeof(char),strlen(fpath)+1,names);
 	fwrite(&finfo,sizeof finfo,1,hashes);
 	filecount++;
+	fprintf(stderr,"\r%15zu bytes, %9d files",bytecount,filecount);
 
 	return 0;
 }
 
-static int cmp_fileinfo(const void *a, const void *b) {
-	struct fileinfo *aa = (struct fileinfo*)a;
-	struct fileinfo *bb = (struct fileinfo*)b;
-
-	return memcmp(aa->hash,bb->hash,sizeof(aa->hash));
+static int cmp_fileinfo(const struct fileinfo *a, const struct fileinfo *b) {
+	return memcmp(a->hash,b->hash,sizeof(a->hash));
 }
 
 /* returns -1 on error, fd of hashes otherwise */
@@ -117,7 +119,7 @@ static struct fileinfo *sort_hashes(void) {
 		return NULL;
 	}
 
-	qsort(infos,filecount,sizeof*infos,cmp_fileinfo);
+	qsort(infos,filecount,sizeof*infos,(int(*)(const void*,const void*))cmp_fileinfo);
 
 	return infos;
 }
@@ -128,11 +130,6 @@ static int print_files(struct fileinfo *infos) {
 	char digest[2*SHA_DIGEST_LENGTH+1];
 
 	fd = fileno(names);
-
-	if (fd < 0) {
-		perror("Cannot open fdup.names");
-		return 0;
-	}
 
 	filenames = mmap(NULL,ftell(names),PROT_READ,MAP_SHARED,fd,0);
 	if (filenames == MAP_FAILED) {
@@ -148,39 +145,59 @@ static int print_files(struct fileinfo *infos) {
 	return 1;
 }
 
+static void help(const char *program) {
+	printf("Usage: %s file...\n",program);
+}
+
 int main(int argc, char *argv[]) {
+	int ok,i;
+	rlim_t maxfiles;
+	struct rlimit limit;
 	struct fileinfo *infos;
 
-	if (argc != 2) {
-		printf("Usage: %s <directory>\n",argv[0]);
+	if (argc < 2) {
+		help(argv[0]);
 		return 2;
 	}
 
 	names = fopen("fdup.names","w+b");
-
 	if (names == NULL) {
 		perror("Cannot open fdup.names");
 		return 1;
 	}
 
 	hashes = fopen("fdup.hashes","w+b");
-
 	if (hashes == NULL) {
 		perror("Cannot open fdup.hashes");
 		return 1;
 	}
 
-	nftw(argv[1],print_walker,256,0);
+	/* attempt to use as many files as possible */
+	getrlimit(RLIMIT_NOFILE,&limit);
+	maxfiles = limit.rlim_cur - 8; /* spare some file descriptors */
+
+	for (i = 1; i < argc; i++) {
+		ok = nftw(argv[i],print_walker,maxfiles,FTW_PHYS);
+		if (ok == -1) {
+			fprintf(stderr,"Error processing argument %s: ",argv[i]);
+			perror(NULL);
+		}
+	}
 
 	fflush(names);
 	fflush(hashes);
 
-	fprintf(stderr,"Sorting %d files...\n",filecount);
+	/* mmap doesn't like empty files. We won't generate output anyway. */
+	if (filecount == 0) return 0;
+
+	fprintf(stderr,"\nSorting %d files...\n",filecount);
 
 	infos = sort_hashes();
 	if (infos == NULL) return 1;
 
-	if (!print_files(infos)) return 1;
+	ok = print_files(infos);
+
+	if (!ok) return 1;
 
 	fclose(names);
 	fclose(hashes);

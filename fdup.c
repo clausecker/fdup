@@ -11,26 +11,37 @@
 
 #include <openssl/sha.h>
 
+#define BUFSIZE (16*1024)
+
+#ifdef __GNUC__
+# define UNUSED __attribute__((unused))
+#else
+# define UNUSED
+#endif
+
 static const char hextab[16] = "0123456789abcdef";
 
-void sha_to_string(char out[41], const unsigned char hash[20]) {
+void sha1_to_string(
+	char out[2*SHA_DIGEST_LENGTH+1],
+	const unsigned char hash[SHA_DIGEST_LENGTH]) {
+
 	int i;
 	unsigned int n;
-	for (i = 0; i < 20; i++) {
+	for (i = 0; i < SHA_DIGEST_LENGTH; i++) {
 		n = hash[i];
 		out[2*i] = hextab[n>>4];
 		out[2*i+1] = hextab[n&15];
 	}
 
-	out[40] = '\0';
+	out[2*i] = '\0';
 }
 
 /* returns 1 on success, 0 on failure */
-int file_sha(unsigned char hash[20], const char *filepath) {
-	unsigned char buf[4096];
+int file_sha1(unsigned char hash[20], const char *filepath) {
+	unsigned char buf[BUFSIZE];
 	SHA_CTX sha;
 	ssize_t count;
-	int fd = open(filepath, O_RDONLY|O_CLOEXEC);
+	int fd = open(filepath, O_RDONLY);
 
 	/* we probably don't have the right permissions */
 	if (fd < 0) {
@@ -39,7 +50,7 @@ int file_sha(unsigned char hash[20], const char *filepath) {
 
 	SHA1_Init(&sha);
 
-	while ((count = read(fd,buf,4096)) > 0) {
+	while ((count = read(fd,buf,BUFSIZE)) > 0) {
 		SHA1_Update(&sha,buf,count);
 	}
 
@@ -56,15 +67,13 @@ int file_sha(unsigned char hash[20], const char *filepath) {
 }
 
 static const char types[] = {
-	[FTW_F]		'-',
-	[FTW_D]		'd',
-	[FTW_DNR]	'D',
-	[FTW_NS]	'!',
-	[FTW_SL]	'l',
-	[FTW_SLN]	'L'
+	[FTW_F]		= '-',
+	[FTW_D]		= 'd',
+	[FTW_DNR]	= 'D',
+	[FTW_NS]	= '!',
+	[FTW_SL]	= 'l',
+	[FTW_SLN]	= 'L'
 };
-
-#define UNUSED __attribute__((unused))
 
 static int print_walker(
 	const char *fpath,
@@ -72,12 +81,12 @@ static int print_walker(
 	int typeflag,
 	struct FTW *ftwbuf UNUSED) {
 
-	unsigned char hash[20];
-	char digest[41];
+	unsigned char hash[SHA_DIGEST_LENGTH];
+	char digest[2*SHA_DIGEST_LENGTH+1];
 	const char *dptr = "";
 
-	if (typeflag == FTW_F && file_sha(hash,fpath)) {
-		sha_to_string(digest,hash);
+	if (typeflag == FTW_F && file_sha1(hash,fpath)) {
+		sha1_to_string(digest,hash);
 		dptr = digest;
 	}
 

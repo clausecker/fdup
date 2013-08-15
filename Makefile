@@ -1,5 +1,5 @@
 LDLIBS=-lcrypto
-CFLAGS=-O3 -Wall -Wextra -std=c1x -g
+CFLAGS=-O3 -Wall -Wextra -pedantic -std=c1x -g -pg
 
 all: fdup
 

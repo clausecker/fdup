@@ -23,14 +23,20 @@
 
 LDLIBS=-lcrypto
 CFLAGS=-O3 -Wall -Wextra -pedantic -std=c1x -g
+
 NROFF=nroff
+GIT=git
 
 all: fdup
 
 .PHONY: all clean
 
 clean:
-	$(RM) *.o *.s fdup
+	$(RM) *.o *.s fdup fdup.tar
 
 README: fdup.1
 	$(NROFF) -man fdup.1 | col -bx >$@
+
+# HEAD gets updated whenever git revision changes
+fdup.tar: .git/HEAD
+	$(GIT) archive --prefix=$@/ --format=tar -o $@ HEAD

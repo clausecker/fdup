@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <libgen.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,8 +52,9 @@
 #endif
 
 struct fileinfo {
-	unsigned char hash[SHA_DIGEST_LENGTH];
 	long path; /* pointer into filename file */
+	ino_t inode; /* tell apart hardlinks to the same file */
+	unsigned char hash[SHA_DIGEST_LENGTH];
 };
 
 static const char hextab[16] = "0123456789abcdef";
@@ -124,6 +126,7 @@ static int print_walker(
 
 	if (!S_ISREG(sb->st_mode) || !file_sha1(finfo.hash,fpath)) return 0;
 
+	finfo.inode = sb->st_ino;
 	finfo.path = ftell(names);
 	fwrite(fpath,sizeof(char),strlen(fpath)+1,names);
 	fwrite(&finfo,sizeof finfo,1,hashes);
@@ -155,20 +158,28 @@ static struct fileinfo *sort_hashes(void) {
 	return infos;
 }
 
-static int print_files(struct fileinfo *infos) {
-	int fd, i;
+static const char *map_filenames(void) {
+	int fd;
+	const char *filenames;
+
+	fd = fileno(names);
+	filenames = mmap(NULL,ftell(names),PROT_READ,MAP_SHARED,fd,0);
+        if (filenames == MAP_FAILED) {
+                perror("Cannot map file names");
+                return NULL;
+        }
+
+	return filenames;
+}
+
+static int print_files(const struct fileinfo *infos) {
+	int i;
 	const char *filenames;
 	char digest[2*SHA_DIGEST_LENGTH+1];
 
-	fd = fileno(names);
+	if ((filenames = map_filenames()) == NULL) return 0;
 
-	filenames = mmap(NULL,ftell(names),PROT_READ,MAP_SHARED,fd,0);
-	if (filenames == MAP_FAILED) {
-		perror("Cannot map temporary file in print_files");
-		return 0;
-	}
-
-	for(i = 0; i < filecount; i++) {
+	for (i = 0; i < filecount; i++) {
 		sha1_to_string(digest,infos[i].hash);
 		printf("%40s %s\n",digest,filenames+infos[i].path);
 	}
@@ -177,21 +188,15 @@ static int print_files(struct fileinfo *infos) {
 }
 
 static int print_dups(const struct fileinfo *infos) {
-	int fd, i;
+	int i;
 	bool odup = false, ndup, first = true;
 	const char *filenames;
 
-	fd = fileno(names);
-
-	filenames = mmap(NULL,ftell(names),PROT_READ,MAP_SHARED,fd,0);
-	if (filenames == MAP_FAILED) {
-		perror("Cannot map temporary file in print_dups");
-		return 0;
-	}
-
 	if (filecount < 2) return 1;
 
-	for(i = 1; i < filecount; i++) {
+	if ((filenames = map_filenames()) == NULL) return 0;
+
+	for (i = 1; i < filecount; i++) {
 		ndup = cmp_fileinfo(&infos[i-1],&infos[i]) == 0;
 
 		if (ndup && !odup && !first) {
@@ -213,12 +218,98 @@ static int print_dups(const struct fileinfo *infos) {
 	return 1;
 }
 
+static int perform_hardlink(const char *old, const char *new) {
+	char *tmp, *new_dup;
+	int rval = 1, len;
+
+	new_dup = strdup(new);
+	if (new_dup == NULL) {
+		perror("malloc failed");
+		exit(1);
+	}
+
+	/* /fdup.##########.tmp */
+	len = strlen(new_dup) + 21;
+
+	tmp = malloc(len);
+	if (tmp == NULL) {
+		perror("malloc failed");
+		exit(1);
+	}
+
+	snprintf(tmp,len,"%s/fdup.%010d.tmp",dirname(new_dup),getpid());
+	free(new_dup);
+
+	if (link(old,tmp) == -1) {
+		fprintf(stderr,"Cannot hardlink %s to %s",old,tmp);
+		perror(NULL);
+		rval = 0;
+	} else if (rename(tmp,new) == -1) {
+		fprintf(stderr,"Cannot rename %s to %s",tmp,new);
+		perror(NULL);
+		rval = 0;
+	}
+
+	free(tmp);
+
+	return rval;
+}
+
 static int make_hard_links(const struct fileinfo *infos) {
-	/* TODO */
+	const char *filenames, *reference;
+	ino_t ref_inode;
+	int i, link_count = 0, pair_count = 0, rval = 1;
+	bool odup = false, ndup;
+
+	if (filecount <2) return 1;
+
+	if ((filenames = map_filenames()) == NULL) return 0;
+
+	for (i = 1; i < filecount; i++) {
+		ndup = cmp_fileinfo(&infos[i-1],&infos[i]) == 0;
+
+		/* add a new file to an existing group */
+		if (odup) {
+			if (infos[i-1].inode == ref_inode
+			|| perform_hardlink(reference,filenames + infos[i-1].path))
+				link_count++;
+			else rval = 0;
+
+			goto stats;
+		}
+
+		/* encountered a new group of duplicate files */
+		if (ndup) {
+			reference = filenames + infos[i-1].path;
+			ref_inode = infos[i-1].inode;
+
+			pair_count++;
+			goto stats;
+		}
+
+		continue;
+
+		stats:
+		odup = ndup;
+		fprintf(stderr,"\rMade %9d hardlinks for %9d groups of duplicates",link_count,pair_count);
+	}
+
+	/* If there is a file left over finish. */
+	if (odup) {
+		if (infos[i-1].inode == ref_inode
+		|| perform_hardlink(reference,filenames + infos[i-1].path))
+			link_count++;
+		else rval = 0;
+
+		fprintf(stderr,"\rMade %9d hardlinks for %9d groups of duplicates",link_count,pair_count);
+	}
+
+	if (link_count > 0 || pair_count > 0) fputs("\n",stderr);
+	return rval;
 }
 
 static void help(const char *program) {
-	printf("Usage: %s [-hl] directory...\n",program);
+	printf("Usage: %s [-H | -L | -S] [-hx] directory...\n",program);
 }
 
 int main(int argc, char *argv[]) {

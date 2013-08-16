@@ -1,0 +1,6 @@
+fdup
+fdup.tar
+*.o
+*.s
+*~
+*.bak

@@ -32,7 +32,7 @@ all: fdup
 .PHONY: all clean
 
 clean:
-	$(RM) *.o *.s fdup fdup.tar
+	$(RM) *.o *.s *~ fdup fdup.tar
 
 README: fdup.1
 	$(NROFF) -man fdup.1 | col -bx >$@

@@ -1,24 +1,57 @@
 .\" Call make README after modifying this file.
-.TH fdup 1 "August 2013" "Robert Clausecker" "User manuals"
+.TH FDUP 1 "August 2013" "Robert Clausecker" "User Commands"
 
 .SH NAME
 fdup \- find duplicates
 
 .SH SYNOPSIS
 .B fdup
+.RI [ MODE ]
+.RI [ OPTION "...]"
 .IR directory ...
 
 .SH DESCRIPTION
-fdup traverses the supplied directories and finds file with equal content. fdup
-then prints files that were found to have duplicates linewise to standard
-output. Groups of equal files are separated by blank lines.
-
-fdup outputs statistics to
+.B fdup
+traverses the supplied directories and finds file with equal contents.
+.B fdup
+outputs statistics to
 .BR stderr (3)
-while processing files. fdup will not follow symbolic links it encounters.
+while processing files.
+.B fdup
+will not follow symbolic links it encounters.
 
 .SH OPTIONS
-none
+
+This utility has three modes of operation. These are selected by exactly one of
+he options
+.BR \-H ,
+.B \-L
+and
+.BR \-S .
+The default operation mode is
+.BR \-L .
+
+.TP
+\.B -H
+Turn each group of files with equal contents into hardlinks to one file. This
+implies the option
+.BR \-x .
+.TP
+.B \-L
+List groups of files with equal contents, separated by blank files.
+.TP
+.B \-S
+Similar to
+.BR \-H ,
+Turn each group of files with equal contents into symbolic links to one file.
+The file that is not turned into a symbolic link is arbitrarily chosen.
+.TP
+.B \-h
+Print a brief help.
+.TP
+.B \-x
+Stay on one file system. Supplying multiple directories on different file
+systems with this option causes an error.
 
 .SH BUGS
 The program is quite slow as it needs to read every file it encounters. Future

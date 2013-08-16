@@ -57,6 +57,14 @@ struct fileinfo {
 
 static const char hextab[16] = "0123456789abcdef";
 
+static enum {
+	NO_XDEV_FLAG = 0x1
+} operation_flags = 0;
+static enum {
+	LIST_DUPS_MODE,
+	LIST_HASH_MODE,
+	HARD_LINK_MODE
+} operation_mode = LIST_DUPS_MODE;
 static FILE *names;
 static FILE *hashes;
 static int filecount = 0;
@@ -147,7 +155,7 @@ static struct fileinfo *sort_hashes(void) {
 	return infos;
 }
 
-static int UNUSED print_files(struct fileinfo *infos) {
+static int print_files(struct fileinfo *infos) {
 	int fd, i;
 	const char *filenames;
 	char digest[2*SHA_DIGEST_LENGTH+1];
@@ -168,7 +176,7 @@ static int UNUSED print_files(struct fileinfo *infos) {
 	return 1;
 }
 
-static int UNUSED print_dups(const struct fileinfo *infos) {
+static int print_dups(const struct fileinfo *infos) {
 	int fd, i;
 	bool odup = false, ndup, first = true;
 	const char *filenames;
@@ -205,17 +213,39 @@ static int UNUSED print_dups(const struct fileinfo *infos) {
 	return 1;
 }
 
+static int make_hard_links(const struct fileinfo *infos) {
+	/* TODO */
+}
+
 static void help(const char *program) {
-	printf("Usage: %s file...\n",program);
+	printf("Usage: %s [-hl] directory...\n",program);
 }
 
 int main(int argc, char *argv[]) {
-	int ok,i;
+	int ok=1,i,opt;
 	rlim_t maxfiles;
 	struct rlimit limit;
 	struct fileinfo *infos;
 
-	if (argc < 2) {
+	while ((opt = getopt(argc,argv,"Hhlx")) != -1) {
+		switch(opt) {
+		case 'l':
+			operation_mode = LIST_HASH_MODE;
+			break;
+		case 'H':
+			operation_mode = HARD_LINK_MODE;
+			/* intentional fallthrough */
+		case 'x':
+			operation_flags |= NO_XDEV_FLAG;
+			break;
+		case 'h':
+		default:
+			help(argv[0]);
+			return 2;
+		}
+	}
+
+	if (optind >= argc) {
 		help(argv[0]);
 		return 2;
 	}
@@ -236,8 +266,8 @@ int main(int argc, char *argv[]) {
 	getrlimit(RLIMIT_NOFILE,&limit);
 	maxfiles = limit.rlim_cur - 8; /* spare some file descriptors */
 
-	for (i = 1; i < argc; i++) {
-		ok = nftw(argv[i],print_walker,maxfiles,FTW_PHYS);
+	for (i = optind; i < argc; i++) {
+		ok = nftw(argv[i],print_walker,maxfiles,operation_flags&NO_XDEV_FLAG?FTW_PHYS:0);
 		if (ok == -1) {
 			fprintf(stderr,"Error processing argument %s: ",argv[i]);
 			perror(NULL);
@@ -255,8 +285,11 @@ int main(int argc, char *argv[]) {
 	infos = sort_hashes();
 	if (infos == NULL) return 1;
 
-	/* ok = print_files(infos); */
-	ok = print_dups(infos);
+	switch (operation_mode) {
+	case LIST_HASH_MODE: ok = print_files(infos); break;
+	case LIST_DUPS_MODE: ok = print_dups(infos); break;
+	case HARD_LINK_MODE: ok = make_hard_links(infos); break;
+	}
 
 	if (!ok) return 1;
 

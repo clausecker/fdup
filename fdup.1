@@ -28,13 +28,13 @@ he options
 .B \-L
 and
 .BR \-S .
-The default operation mode is
+The default mode is
 .BR \-L .
 
 .TP
 \.B -H
 Turn each group of files with equal contents into hardlinks to one file. This
-implies the option
+currently implies
 .BR \-x .
 .TP
 .B \-L
@@ -56,8 +56,7 @@ systems with this option causes an error.
 .SH BUGS
 The program is quite slow as it needs to read every file it encounters. Future
 versions of this program will employ smartes techniques to compare files. fdup
-lacks configurability and options. Future version are going to have command
-line options.
+lacks configurability and options.
 
 Please file bugs at <https://github.com/fuzxxl/fdup/issues>.
 

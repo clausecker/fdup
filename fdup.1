@@ -22,14 +22,17 @@ will not follow symbolic links it encounters.
 
 .SH OPTIONS
 
-This utility has three modes of operation. These are selected by exactly one of
-he options
+This utility has three modes of operation. These are selected with the options
 .BR \-H ,
 .B \-L
 and
 .BR \-S .
-The default mode is
-.BR \-L .
+If none of these options is given,
+.B fdup
+behaves as if
+.B \-S
+was selected. If more than one mode of operation is given, only the last mode
+that was passed counts.
 
 .TP
 \.B -H

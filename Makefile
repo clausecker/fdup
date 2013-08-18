@@ -24,10 +24,21 @@
 LDLIBS=-lcrypto
 CFLAGS=-O3 -Wall -Wextra -pedantic -std=c1x -g
 
+LFS_CFLAGS=$(shell getconf LFS_CFLAGS)
+LFS_LDFLAGS=$(shell getconf LFS_LDFLAGS)
+LFS_LIBS=$(shell getconf LFS_LIBS)
+
+LDLIBS=$(LFS_LIBS) -lcrypto
+LDFLAGS=$(LFS_LDFLAGS)
+CFLAGS=$(LFS_CFLAGS) -O3 -Wall -Wextra -pedantic -std=c1x -g
 NROFF=nroff
 GIT=git
 
+OBJ=fdup.o match.o
+
 all: fdup
+
+fdup: $(OBJ)
 
 .PHONY: all clean
 

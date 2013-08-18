@@ -6,60 +6,80 @@ fdup \- find duplicates
 
 .SH SYNOPSIS
 .B fdup
-.RI [ MODE ]
-.RI [ OPTION "...]"
+.RI [ mode ]
+.RI [ option "...]"
 .IR directory ...
 
 .SH DESCRIPTION
-.B fdup
-traverses the supplied directories and finds file with equal contents.
-.B fdup
-outputs statistics to
-.BR stderr (3)
-while processing files.
-.B fdup
-will not follow symbolic links it encounters.
+\fBfdup\fR traverses the supplied directories and finds file with equal
+contents. \fBfdup\fR outputs statistics to \fBstderr\fR(3) while processing
+files. \fBfdup\fR will not follow symbolic links it encounters.
 
 .SH OPTIONS
 
 This utility has three modes of operation. These are selected with the options
-.BR \-H ,
-.B \-L
-and
-.BR \-S .
-If none of these options is given,
-.B fdup
-behaves as if
-.B \-S
-was selected. If more than one mode of operation is given, only the last mode
-that was passed counts.
+\fB\-H\fR, \fB\-L\fR and \fB\-S\fR. If none of these options is given,
+\fBfdup\fR behaves as if \fB\-S\fR was selected. If more than one mode of
+operation is given, only the last mode that was passed counts.
 
 .TP
-\.B -H
+.B \-H
 Turn each group of files with equal contents into hardlinks to one file. This
-currently implies
-.BR \-x .
+implies \fB-b \fIl\fR.
+
 .TP
 .B \-L
 List groups of files with equal contents, separated by blank files.
+
 .TP
 .B \-S
-Similar to
-.BR \-H ,
-Turn each group of files with equal contents into symbolic links to one file.
-The file that is not turned into a symbolic link is arbitrarily chosen.
+Similar to \fB\-H\fR, turn each group of files with equal contents into
+symbolic links to one file. The file that is not turned into a symbolic link is
+arbitrarily chosen.
+
+.TP
+\fB\-b \fIspecifier\fR...
+Control file matching behavior. \fIspecifier\fR is one or more of the following
+specifiers. By default, \fBfdup\fR considers all cases as duplicate that can be
+turned into distinct files by the specifiers below.
+
+.RS
+.TP
+.B c
+Files with different creation times are considered distinct
+.TP
+.B d
+Files on different devices are considered distinct
+.TP
+.B g
+Files owned by different groups are considered distinct
+.TP
+.B l
+Hardlinks to the same file are considered distinct
+.TP
+.B m
+Files with different modification times are considered distinct
+.TP
+.B p
+Files with different permissions are considered distinct
+.TP
+.B u
+Files owned different users are considered distinct
+.RE
+
 .TP
 .B \-h
 Print a brief help.
+
 .TP
 .B \-x
-Stay on one file system. Supplying multiple directories on different file
-systems with this option causes an error.
+Stay on one file system. This applies to each supplied directory individually.
 
 .SH BUGS
-The program is quite slow as it needs to read every file it encounters. Future
-versions of this program will employ smartes techniques to compare files. fdup
-lacks configurability and options.
+When using the option
+.BR \-H ,
+.B fdup
+is known to have problems when too many files are considered equal 
 
 Please file bugs at <https://github.com/fuzxxl/fdup/issues>.
 

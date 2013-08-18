@@ -80,7 +80,9 @@ static int print_dups(struct matcher *m) {
 	return 0;
 }
 
-static int perform_hardlink(const char *old, const char *new) {
+typedef int link_func(const char*,const char*);
+
+static int perform_link(link_func f, const char *old, const char *new) {
 	char *tmp, *new_dup;
 	int rval = 0, len;
 
@@ -102,7 +104,7 @@ static int perform_hardlink(const char *old, const char *new) {
 	snprintf(tmp,len,"%s/fdup.%010d.tmp",dirname(new_dup),getpid());
 	free(new_dup);
 
-	if (link(old,tmp) == -1) {
+	if (f(old,tmp) == -1) {
 		fprintf(stderr,"Cannot hardlink %s to %s",old,tmp);
 		perror(NULL);
 		rval = 1;
@@ -117,7 +119,7 @@ static int perform_hardlink(const char *old, const char *new) {
 	return rval;
 }
 
-static int make_hard_links(struct matcher *m) {
+static int make_links(struct matcher *m, link_func f) {
 	const char *orig, *dup;
 	int link_count = 0, pair_count = 0;
 
@@ -125,8 +127,8 @@ static int make_hard_links(struct matcher *m) {
 		pair_count++;
 		while ((dup = next_file(m))) {
 			link_count++;
-			if (perform_hardlink(orig,dup)) return 1;
-			fprintf(stderr,"\rMade %9d hardlinks for %9d groups",link_count,pair_count);
+			if (perform_link(f,orig,dup)) return 1;
+			fprintf(stderr,"\rMade %9d links for %9d groups",link_count,pair_count);
 		}
 	}
 
@@ -134,16 +136,17 @@ static int make_hard_links(struct matcher *m) {
 }
 
 static void help(const char *program) {
-	printf("Usage: %s [-H | -L | -S] [-hx] directory...\n",program);
+	printf("Usage: %s [-H | -L | -S] [-hx] [-b cdglmpu] directory...\n",program);
 }
 
 int main(int argc, char *argv[]) {
 	int ok=1,i,opt;
 	rlim_t maxfiles;
 	struct rlimit limit;
-	matcher_flags flags = M_MODE|M_UID|M_GID;
+	matcher_flags flags = 0;
+	int xdev = 0;
 
-	while ((opt = getopt(argc,argv,"SHLhx")) != -1) {
+	while ((opt = getopt(argc,argv,"SHLb:hx")) != -1) {
 		switch(opt) {
 		case 'L':
 			operation_mode = LIST_DUPS_MODE;
@@ -156,7 +159,22 @@ int main(int argc, char *argv[]) {
 			flags |= M_LINK; /* avoid a quirk in rename */
 			/* intentional fallthrough */
 		case 'x':
-			flags |= M_DEV;
+			xdev = 1;
+			break;
+		case 'b':
+			optarg--;
+			while (*++optarg != '\0') switch (*optarg) {
+			case 'c': flags |= M_CTIME; break;
+			case 'd': flags |= M_DEV; break;
+			case 'g': flags |= M_GID; break;
+			case 'l': flags |= M_LINK; break;
+			case 'm': flags |= M_MTIME; break;
+			case 'p': flags |= M_MODE; break;
+			case 'u': flags |= M_UID; break;
+			default:
+				fprintf(stderr,"Unknown specifier %c to -b\n",*optarg);
+				return 2;
+			}
 			break;
 		case 'h':
 		default:
@@ -179,7 +197,7 @@ int main(int argc, char *argv[]) {
 	fputs("Scanning file system\n",stderr);
 
 	for (i = optind; i < argc; i++) {
-		ok = nftw(argv[i],print_walker,maxfiles,flags&M_DEV?FTW_PHYS:0);
+		ok = nftw(argv[i],print_walker,maxfiles,FTW_PHYS|(xdev?FTW_MOUNT:0));
 		if (ok == -1) {
 			fprintf(stderr,"\nError processing argument %s: ",argv[i]);
 			perror(NULL);
@@ -191,8 +209,8 @@ int main(int argc, char *argv[]) {
 
 	switch (operation_mode) {
 	case LIST_DUPS_MODE: ok = print_dups(m); break;
-	case HARD_LINK_MODE: ok = make_hard_links(m); break;
-	case SOFT_LINK_MODE: fputs("Not implemented yet",stderr); break;
+	case HARD_LINK_MODE: ok = make_links(m,link); break;
+	case SOFT_LINK_MODE: ok = make_links(m,symlink); break;
 	}
 
 	if (!ok) return 1;

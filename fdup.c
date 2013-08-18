@@ -39,194 +39,55 @@
 
 #include <openssl/sha.h>
 
-#define BUFSIZE (16*1024)
+#include "match.h"
 
-#ifndef __has_attribute
-# define __has_attribute(x) 0
-#endif
-
-/* this macro surpresses warnings that something is unused */
-#if defined(__GNUC__) || __has_attribute(unused)
-# define UNUSED __attribute__((unused))
-#else
-# define UNUSED
-#endif
-
-struct fileinfo {
-	long path; /* pointer into filename file */
-	ino_t inode; /* tell apart hardlinks to the same file */
-	unsigned char hash[SHA_DIGEST_LENGTH];
-};
-
-static const char hextab[16] = "0123456789abcdef";
-
-static enum {
-	NO_XDEV_FLAG = 0x1
-} operation_flags = 0;
 static enum {
 	LIST_DUPS_MODE,
-	LIST_HASH_MODE,
-	HARD_LINK_MODE
+	HARD_LINK_MODE,
+	SOFT_LINK_MODE
 } operation_mode = LIST_DUPS_MODE;
-static FILE *names;
-static FILE *hashes;
-static int filecount = 0;
-static size_t bytecount = 0;
 
-static void sha1_to_string(
-	char out[2*SHA_DIGEST_LENGTH+1],
-	const unsigned char hash[SHA_DIGEST_LENGTH]) {
+static struct matcher *m;
 
-	int i;
-	unsigned int n;
-	for (i = 0; i < SHA_DIGEST_LENGTH; i++) {
-		n = hash[i];
-		out[2*i] = hextab[n>>4];
-		out[2*i+1] = hextab[n&15];
-	}
+static int print_walker(const char *fpath,const struct stat *sb,int tf,struct FTW *ftwbuf) {
 
-	out[2*i] = '\0';
-}
+	/* silence warnings */
+	(void)tf;
+	(void)ftwbuf;
 
-/* returns 1 on success, 0 on failure */
-static int file_sha1(unsigned char hash[20], const char *filepath) {
-	unsigned char buf[BUFSIZE];
-	SHA_CTX sha;
-	ssize_t count;
-	int fd = open(filepath, O_RDONLY);
+	if (!S_ISREG(sb->st_mode)) return 0;
 
-	/* we probably don't have the right permissions */
-	if (fd < 0) return 0;
+	if (register_file(m,fpath,sb)) return 1;
 
-	SHA1_Init(&sha);
-
-	while ((count = read(fd,buf,BUFSIZE)) > 0) {
-		bytecount += count;
-		SHA1_Update(&sha,buf,count);
-	}
-
-	if (count < 0) {
-		perror("Error reading file in file_sha");
-		close(fd);
-		return 0;
-	}
-
-	SHA1_Final(hash,&sha);
-	close(fd);
-
-	return 1;
-}
-
-static int print_walker(
-	const char *fpath,
-	const struct stat *sb,
-	int typeflag UNUSED,
-	struct FTW *ftwbuf UNUSED) {
-
-	struct fileinfo finfo;
-
-	if (!S_ISREG(sb->st_mode) || !file_sha1(finfo.hash,fpath)) return 0;
-
-	finfo.inode = sb->st_ino;
-	finfo.path = ftell(names);
-	fwrite(fpath,sizeof(char),strlen(fpath)+1,names);
-	fwrite(&finfo,sizeof finfo,1,hashes);
-	filecount++;
-	fprintf(stderr,"\r%15zu bytes, %9d files",bytecount,filecount);
+	fprintf(stderr,"\r%9d files",get_file_count(m));
 
 	return 0;
 }
 
-static int cmp_fileinfo(const struct fileinfo *a, const struct fileinfo *b) {
-	return memcmp(a->hash,b->hash,sizeof(a->hash));
-}
+static int print_dups(struct matcher *m) {
+	int first = 1;
+	const char *file;
 
-/* returns -1 on error, fd of hashes otherwise */
-static struct fileinfo *sort_hashes(void) {
-	int fd;
-	struct fileinfo *infos;
+	while ((file = next_group(m))) {
+		if (first) first = 0;
+		else printf("\n");
 
-	fd = fileno(hashes);
+		puts(file);
 
-	infos = mmap(NULL,filecount*sizeof*infos,PROT_READ|PROT_WRITE,MAP_SHARED,fd,0);
-	if (infos == MAP_FAILED) {
-		perror("Cannot map temporary file in sort_hashes");
-		return NULL;
+		while ((file = next_file(m))) puts(file);
 	}
 
-	qsort(infos,filecount,sizeof*infos,(int(*)(const void*,const void*))cmp_fileinfo);
-
-	return infos;
-}
-
-static const char *map_filenames(void) {
-	int fd;
-	const char *filenames;
-
-	fd = fileno(names);
-	filenames = mmap(NULL,ftell(names),PROT_READ,MAP_SHARED,fd,0);
-        if (filenames == MAP_FAILED) {
-                perror("Cannot map file names");
-                return NULL;
-        }
-
-	return filenames;
-}
-
-static int print_files(const struct fileinfo *infos) {
-	int i;
-	const char *filenames;
-	char digest[2*SHA_DIGEST_LENGTH+1];
-
-	if ((filenames = map_filenames()) == NULL) return 0;
-
-	for (i = 0; i < filecount; i++) {
-		sha1_to_string(digest,infos[i].hash);
-		printf("%40s %s\n",digest,filenames+infos[i].path);
-	}
-
-	return 1;
-}
-
-static int print_dups(const struct fileinfo *infos) {
-	int i;
-	bool odup = false, ndup, first = true;
-	const char *filenames;
-
-	if (filecount < 2) return 1;
-
-	if ((filenames = map_filenames()) == NULL) return 0;
-
-	for (i = 1; i < filecount; i++) {
-		ndup = cmp_fileinfo(&infos[i-1],&infos[i]) == 0;
-
-		if (ndup && !odup && !first) {
-			puts("");
-		}
-
-		if (ndup || odup) {
-			first = false;
-			puts(filenames+infos[i-1].path);
-		}
-
-		odup = ndup;
-	}
-
-	if (odup) {
-		printf("%s\n",filenames+infos[filecount-1].path);
-	}
-
-	return 1;
+	return 0;
 }
 
 static int perform_hardlink(const char *old, const char *new) {
 	char *tmp, *new_dup;
-	int rval = 1, len;
+	int rval = 0, len;
 
 	new_dup = strdup(new);
 	if (new_dup == NULL) {
 		perror("malloc failed");
-		exit(1);
+		return 1;
 	}
 
 	/* /fdup.##########.tmp */
@@ -235,7 +96,7 @@ static int perform_hardlink(const char *old, const char *new) {
 	tmp = malloc(len);
 	if (tmp == NULL) {
 		perror("malloc failed");
-		exit(1);
+		return 1;
 	}
 
 	snprintf(tmp,len,"%s/fdup.%010d.tmp",dirname(new_dup),getpid());
@@ -244,11 +105,11 @@ static int perform_hardlink(const char *old, const char *new) {
 	if (link(old,tmp) == -1) {
 		fprintf(stderr,"Cannot hardlink %s to %s",old,tmp);
 		perror(NULL);
-		rval = 0;
+		rval = 1;
 	} else if (rename(tmp,new) == -1) {
 		fprintf(stderr,"Cannot rename %s to %s",tmp,new);
 		perror(NULL);
-		rval = 0;
+		rval = 1;
 	}
 
 	free(tmp);
@@ -256,57 +117,20 @@ static int perform_hardlink(const char *old, const char *new) {
 	return rval;
 }
 
-static int make_hard_links(const struct fileinfo *infos) {
-	const char *filenames, *reference;
-	ino_t ref_inode;
-	int i, link_count = 0, pair_count = 0, rval = 1;
-	bool odup = false, ndup;
+static int make_hard_links(struct matcher *m) {
+	const char *orig, *dup;
+	int link_count = 0, pair_count = 0;
 
-	if (filecount <2) return 1;
-
-	if ((filenames = map_filenames()) == NULL) return 0;
-
-	for (i = 1; i < filecount; i++) {
-		ndup = cmp_fileinfo(&infos[i-1],&infos[i]) == 0;
-
-		/* add a new file to an existing group */
-		if (odup) {
-			if (infos[i-1].inode == ref_inode
-			|| perform_hardlink(reference,filenames + infos[i-1].path))
-				link_count++;
-			else rval = 0;
-
-			goto stats;
-		}
-
-		/* encountered a new group of duplicate files */
-		if (ndup) {
-			reference = filenames + infos[i-1].path;
-			ref_inode = infos[i-1].inode;
-
-			pair_count++;
-			goto stats;
-		}
-
-		continue;
-
-		stats:
-		odup = ndup;
-		fprintf(stderr,"\rMade %9d hardlinks for %9d groups of duplicates",link_count,pair_count);
-	}
-
-	/* If there is a file left over finish. */
-	if (odup) {
-		if (infos[i-1].inode == ref_inode
-		|| perform_hardlink(reference,filenames + infos[i-1].path))
+	while ((orig = next_group(m))) {
+		pair_count++;
+		while ((dup = next_file(m))) {
 			link_count++;
-		else rval = 0;
-
-		fprintf(stderr,"\rMade %9d hardlinks for %9d groups of duplicates",link_count,pair_count);
+			if (perform_hardlink(orig,dup)) return 1;
+			fprintf(stderr,"\rMade %9d hardlinks for %9d groups",link_count,pair_count);
+		}
 	}
 
-	if (link_count > 0 || pair_count > 0) fputs("\n",stderr);
-	return rval;
+	return 0;
 }
 
 static void help(const char *program) {
@@ -317,18 +141,22 @@ int main(int argc, char *argv[]) {
 	int ok=1,i,opt;
 	rlim_t maxfiles;
 	struct rlimit limit;
-	struct fileinfo *infos;
+	matcher_flags flags = M_MODE|M_UID|M_GID;
 
-	while ((opt = getopt(argc,argv,"Hhlx")) != -1) {
+	while ((opt = getopt(argc,argv,"SHLhx")) != -1) {
 		switch(opt) {
-		case 'l':
-			operation_mode = LIST_HASH_MODE;
+		case 'L':
+			operation_mode = LIST_DUPS_MODE;
+			break;
+		case 'S':
+			operation_mode = SOFT_LINK_MODE;
 			break;
 		case 'H':
 			operation_mode = HARD_LINK_MODE;
+			flags |= M_LINK; /* avoid a quirk in rename */
 			/* intentional fallthrough */
 		case 'x':
-			operation_flags |= NO_XDEV_FLAG;
+			flags |= M_DEV;
 			break;
 		case 'h':
 		default:
@@ -342,51 +170,34 @@ int main(int argc, char *argv[]) {
 		return 2;
 	}
 
-	names = tmpfile();
-	if (names == NULL) {
-		perror("Cannot create temporary file");
-		return 1;
-	}
-
-	hashes = tmpfile();
-	if (hashes == NULL) {
-		perror("Cannot create temporary file");
-		return 1;
-	}
+	m = new_matcher(flags);
 
 	/* attempt to use as many files as possible */
 	getrlimit(RLIMIT_NOFILE,&limit);
 	maxfiles = limit.rlim_cur - 8; /* spare some file descriptors */
 
+	fputs("Scanning file system\n",stderr);
+
 	for (i = optind; i < argc; i++) {
-		ok = nftw(argv[i],print_walker,maxfiles,operation_flags&NO_XDEV_FLAG?FTW_PHYS:0);
+		ok = nftw(argv[i],print_walker,maxfiles,flags&M_DEV?FTW_PHYS:0);
 		if (ok == -1) {
-			fprintf(stderr,"Error processing argument %s: ",argv[i]);
+			fprintf(stderr,"\nError processing argument %s: ",argv[i]);
 			perror(NULL);
 		}
 	}
 
-	fflush(names);
-	fflush(hashes);
-
-	/* mmap doesn't like empty files. We won't generate output anyway. */
-	if (filecount == 0) return 0;
-
-	fprintf(stderr,"\nSorting %d files...\n",filecount);
-
-	infos = sort_hashes();
-	if (infos == NULL) return 1;
+	fputs("\nLooking for duplicates...\n",stderr);
+	if (finalize_matcher(m)) return 1;
 
 	switch (operation_mode) {
-	case LIST_HASH_MODE: ok = print_files(infos); break;
-	case LIST_DUPS_MODE: ok = print_dups(infos); break;
-	case HARD_LINK_MODE: ok = make_hard_links(infos); break;
+	case LIST_DUPS_MODE: ok = print_dups(m); break;
+	case HARD_LINK_MODE: ok = make_hard_links(m); break;
+	case SOFT_LINK_MODE: fputs("Not implemented yet",stderr); break;
 	}
 
 	if (!ok) return 1;
 
-	fclose(names);
-	fclose(hashes);
+	free_matcher(m);
 
 	return 0;
 }

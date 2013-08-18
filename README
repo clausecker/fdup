@@ -1,0 +1,87 @@
+FDUP(1)                          User Commands                         FDUP(1)
+
+
+
+NAME
+       fdup - find duplicates
+
+
+SYNOPSIS
+       fdup [mode] [option...]  directory...
+
+
+DESCRIPTION
+       fdup  traverses the supplied directories and finds file with equal con‐
+       tents. fdup outputs statistics to  stderr(3)  while  processing  files.
+       fdup will not follow symbolic links it encounters.
+
+
+OPTIONS
+       This  utility has three modes of operation. These are selected with the
+       options -H, -L and -S. If none of these options is given, fdup  behaves
+       as  if  -S  was  selected. If more than one mode of operation is given,
+       only the last mode that was passed counts.
+
+
+       -H     Turn each group of files with equal contents into  hardlinks  to
+              one file. This implies -b l.
+
+
+       -L     List  groups  of  files  with equal contents, separated by blank
+              files.
+
+
+       -S     Similar to -H, turn each group of files with equal contents into
+              symbolic  links  to one file. The file that is not turned into a
+              symbolic link is arbitrarily chosen.
+
+
+       -b specifier...
+              Control file matching behavior. specifier is one or more of  the
+              following  specifiers.  By  default, fdup considers all cases as
+              duplicate that can be turned into distinct files by  the  speci‐
+              fiers below.
+
+
+              c      Files  with  different creation times are considered dis‐
+                     tinct
+
+              d      Files on different devices are considered distinct
+
+              g      Files owned by different groups are considered distinct
+
+              l      Hardlinks to the same file are considered distinct
+
+              m      Files with different modification  times  are  considered
+                     distinct
+
+              p      Files with different permissions are considered distinct
+
+              u      Files owned different users are considered distinct
+
+
+       -h     Print a brief help.
+
+
+       -x     Stay on one file system. This applies to each supplied directory
+              individually.
+
+
+BUGS
+       When using the option -H, fdup is known to have problems when too  many
+       files are considered equal
+
+       Please file bugs at <https://github.com/fuzxxl/fdup/issues>.
+
+
+COPYRIGHT
+       This  program,  its  source  code  and this manpage is licensed under a
+       2-clause BSD license. See file COPYING for details.
+
+
+AUTHOR
+       Written by Robert Clausecker <fuzxxl@gmail.com>.
+
+
+
+Robert Clausecker                 August 2013                          FDUP(1)

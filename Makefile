@@ -28,6 +28,8 @@ LFS_CFLAGS=$(shell getconf LFS_CFLAGS)
 LFS_LDFLAGS=$(shell getconf LFS_LDFLAGS)
 LFS_LIBS=$(shell getconf LFS_LIBS)
 
+REVISION=$(shell git rev-parse --short HEAD)
+
 LDLIBS=$(LFS_LIBS) -lcrypto
 LDFLAGS=$(LFS_LDFLAGS)
 CFLAGS=$(LFS_CFLAGS) -O3 -Wall -Wextra -pedantic -std=c1x -g
@@ -50,4 +52,4 @@ README: fdup.1
 
 # HEAD gets updated whenever git revision changes
 fdup.tar: .git/HEAD
-	$(GIT) archive --prefix=$@/ --format=tar -o $@ HEAD
+	$(GIT) archive --prefix=fdup-$(REVISION)/ --format=tar -o $@ HEAD

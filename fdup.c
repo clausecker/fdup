@@ -105,7 +105,7 @@ static int perform_link(link_func f, const char *old, const char *new) {
 	free(new_dup);
 
 	if (f(old,tmp) == -1) {
-		fprintf(stderr,"Cannot hardlink %s to %s",old,tmp);
+		fprintf(stderr,"Cannot link %s to %s",old,tmp);
 		perror(NULL);
 		rval = 1;
 	} else if (rename(tmp,new) == -1) {
@@ -194,7 +194,7 @@ int main(int argc, char *argv[]) {
 	getrlimit(RLIMIT_NOFILE,&limit);
 	maxfiles = limit.rlim_cur - 8; /* spare some file descriptors */
 
-	fputs("Scanning file system\n",stderr);
+	fputs("Scanning file system...\n",stderr);
 
 	for (i = optind; i < argc; i++) {
 		ok = nftw(argv[i],print_walker,maxfiles,FTW_PHYS|(xdev?FTW_MOUNT:0));

@@ -356,7 +356,7 @@ void free_matcher(struct matcher *m) {
 	pagesize = sysconf(_SC_PAGE_SIZE);
 	if (pagesize > 0) goto got_pagesize;
 
-	perror("Could not get page size");
+	fputs("Could not get page size\n",stderr);
 	goto skip_munmap;
 
 	got_pagesize:

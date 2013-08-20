@@ -48,6 +48,9 @@ static enum {
 } operation_mode = LIST_DUPS_MODE;
 
 static struct matcher *m;
+static off_t lower_boundary = 0;
+static off_t upper_boundary = 0;
+static int has_upper_boundary = 0;
 
 static int print_walker(const char *fpath,const struct stat *sb,int tf,struct FTW *ftwbuf) {
 
@@ -56,6 +59,8 @@ static int print_walker(const char *fpath,const struct stat *sb,int tf,struct FT
 	(void)ftwbuf;
 
 	if (!S_ISREG(sb->st_mode)) return 0;
+	if (sb->st_size < lower_boundary) return 0;
+	if (has_upper_boundary && sb->st_size > upper_boundary) return 0;
 
 	if (register_file(m,fpath,sb)) return 1;
 
@@ -136,7 +141,20 @@ static int make_links(struct matcher *m, link_func f) {
 }
 
 static void help(const char *program) {
-	printf("Usage: %s [-H | -L | -S] [-hx] [-b cdglmpu] directory...\n",program);
+	printf("Usage: %s [-H | -L | -S] [-hx] [-b cdglmpu] [-s n[,m]] directory...\n",program);
+}
+
+/* apply kilo, mega, giga etc. suffix */
+static off_t adjust_suffix(off_t n, char suffix) {
+	switch (suffix) {
+	case 'K': return n << 10;
+	case 'M': return n << 20;
+	case 'G': return n << 30;
+	case 'T': return n << 40;
+	case 'P': return n << 50;
+	case 'E': return n << 60;
+	default: return n;
+}
 }
 
 int main(int argc, char *argv[]) {
@@ -145,8 +163,9 @@ int main(int argc, char *argv[]) {
 	struct rlimit limit;
 	matcher_flags flags = 0;
 	int xdev = 0;
+	char *argrmdr;
 
-	while ((opt = getopt(argc,argv,"SHLb:hx")) != -1) {
+	while ((opt = getopt(argc,argv,"SHLb:hs:x")) != -1) {
 		switch(opt) {
 		case 'L':
 			operation_mode = LIST_DUPS_MODE;
@@ -175,6 +194,34 @@ int main(int argc, char *argv[]) {
 				fprintf(stderr,"Unknown specifier %c to -b\n",*optarg);
 				return 2;
 			}
+			break;
+		case 's':
+			if (*optarg == '\0') {
+				help(argv[0]);
+				return 2;
+			}
+			lower_boundary = strtoll(optarg,&argrmdr,10);
+			if (strchr(",KMGTPE",*argrmdr) == NULL) {
+				fprintf(stderr,"Unexpected character %c in string to -s\n",*argrmdr);
+				help(argv[0]);
+				return 2;
+			}
+			if (*argrmdr != '\0' && *argrmdr != ',')
+				lower_boundary = adjust_suffix(lower_boundary,*argrmdr++);
+			if (*argrmdr == ',') argrmdr++;
+			if (*argrmdr == '\0') break;
+
+			has_upper_boundary = 1;
+			optarg = argrmdr;
+			upper_boundary = strtoll(optarg,&argrmdr,10);
+
+			if (strchr("KMGTPE",*argrmdr) == NULL) {
+				fprintf(stderr,"Unexpected character %c in string to -s\n",*argrmdr);
+				help(argv[0]);
+				return 2;
+			}
+
+			if (*argrmdr != '\0') upper_boundary = adjust_suffix(upper_boundary,*argrmdr);
 			break;
 		case 'h':
 		default:

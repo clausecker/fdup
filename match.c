@@ -129,6 +129,9 @@ int register_file(struct matcher *m, const char *path, const struct stat *stat) 
 		return 1;
 	}
 
+	/* avoid leaking stack contents into temporary file */
+	memset(&info,0,sizeof info);
+
 	offset = ftello(m->name_file);
 	info.path = offset;
 	info.hashed = false;

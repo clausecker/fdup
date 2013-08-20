@@ -41,7 +41,7 @@ arbitrarily chosen.
 \fB\-b \fIspecifier\fR...
 Control file matching behavior. \fIspecifier\fR is one or more of the following
 specifiers. By default, \fBfdup\fR considers all cases as duplicate that can be
-turned into distinct files by the specifiers below.
+detected as distinct files with the specifiers below.
 
 .RS
 .TP
@@ -64,7 +64,7 @@ Files with different modification times are considered distinct
 Files with different permissions are considered distinct
 .TP
 .B u
-Files owned different users are considered distinct
+Files owned by different users are considered distinct
 .RE
 
 .TP

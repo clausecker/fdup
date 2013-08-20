@@ -39,7 +39,7 @@ OPTIONS
        -b specifier...
               Control file matching behavior. specifier is one or more of  the
               following  specifiers.  By  default, fdup considers all cases as
-              duplicate that can be turned into distinct files by  the  speci‐
+              duplicate that can be detected as distinct files with the speci‐
               fiers below.
 
 
@@ -57,10 +57,27 @@ OPTIONS
 
               p      Files with different permissions are considered distinct
 
-              u      Files owned different users are considered distinct
+              u      Files owned by different users are considered distinct
 
 
        -h     Print a brief help.
+
+
+       -s n[,m]
+              Restrict  file  size when looking for duplicates. If used in the
+              form -s n, fdup ignores all files that are less than n bytes  in
+              size.   If  used in the form -s n,m, fdup ignores all files that
+              are less than n or more than m bytes in size. If you don't  want
+              to  specify  a  lower  boundary,  use  -s  0,m. By default, fdup
+              behaves as if -s 0 has been given.
+
+              Suffixes K, M, G, T, P and  E  can  be  used  to  specify  1024,
+              1024*1024, 1024*1024*1024 etc. bytes.
+
+              This  option  can speed up operation if you are scanning a large
+              amount of small files but don't care about duplicates  in  them,
+              or  if you don't want fdup to scan through very large files that
+              are known not to be duplicates.
 
 
        -x     Stay on one file system. This applies to each supplied directory
@@ -68,14 +85,14 @@ OPTIONS
 
 
 BUGS
-       When using the option -H, fdup is known to have problems when too  many
+       When  using the option -H, fdup is known to have problems when too many
        files are considered equal
 
        Please file bugs at <https://github.com/fuzxxl/fdup/issues>.
 
 
 COPYRIGHT
-       This  program,  its  source  code  and this manpage is licensed under a
+       This program, its source code and this  manpage  is  licensed  under  a
        2-clause BSD license. See file COPYING for details.
 
 

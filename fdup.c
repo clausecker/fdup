@@ -175,8 +175,8 @@ int main(int argc, char *argv[]) {
 			break;
 		case 'H':
 			operation_mode = HARD_LINK_MODE;
-			flags |= M_LINK; /* avoid a quirk in rename */
-			/* intentional fallthrough */
+			flags |= M_DEV|M_LINK; /* avoid a quirk in rename */
+			break;
 		case 'x':
 			xdev = 1;
 			break;

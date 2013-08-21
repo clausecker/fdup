@@ -33,7 +33,7 @@ CFLAGS=$(LFS_CFLAGS) -O3 -Wall -Wextra -pedantic -std=c1x -g
 NROFF=nroff
 GIT=git
 
-OBJ=fdup.o match.o
+OBJ=btrfs.o fdup.o match.o
 
 all: fdup
 

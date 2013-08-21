@@ -17,10 +17,18 @@ files. \fBfdup\fR will not follow symbolic links it encounters.
 
 .SH OPTIONS
 
-This utility has three modes of operation. These are selected with the options
-\fB\-H\fR, \fB\-L\fR and \fB\-S\fR. If none of these options is given,
-\fBfdup\fR behaves as if \fB\-S\fR was selected. If more than one mode of
-operation is given, only the last mode that was passed counts.
+This utility has four modes of operation. These are selected with the options
+\fB-B\fR, \fB\-H\fR, \fB\-L\fR and \fB\-S\fR. If none of these options is
+given, \fBfdup\fR behaves as if \fB\-S\fR was selected. If more than one mode
+of operation is given, only the last mode that was passed counts.
+
+.TP
+.B \-B
+Turn files with equal contents into \fBbtrfs\fR(8) lightweight copies of each
+other. A lightweight or COW copy shares the underlying disk space with the
+original file until you change it, but has no other connections to the original
+file. This mode is preferable where applicable. This option only works on Linux
+with files on \fBbtrfs\fR file systems and implies \fB-b \fId\fR.
 
 .TP
 .B \-H

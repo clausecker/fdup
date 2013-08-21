@@ -17,33 +17,41 @@ DESCRIPTION
 
 
 OPTIONS
-       This  utility has three modes of operation. These are selected with the
-       options -H, -L and -S. If none of these options is given, fdup  behaves
-       as  if  -S  was  selected. If more than one mode of operation is given,
-       only the last mode that was passed counts.
+       This  utility  has four modes of operation. These are selected with the
+       options -B, -H, -L and -S. If none of  these  options  is  given,  fdup
+       behaves  as  if  -S was selected. If more than one mode of operation is
+       given, only the last mode that was passed counts.
 
 
-       -H     Turn each group of files with equal contents into  hardlinks  to
-              one file. This implies -b l.
+       -B     Turn files with equal contents into btrfs(8) lightweight  copies
+              of  each  other. A lightweight or COW copy shares the underlying
+              disk space with the original file until you change it,  but  has
+              no  other connections to the original file. This mode is prefer‐
+              able where applicable. This option  only  works  on  Linux  with
+              files on btrfs file systems and implies -b d.
 
 
-       -L     List  groups  of  files  with equal contents, separated by blank
+       -H     Turn  each  group of files with equal contents into hardlinks to
+              one file. This implies -b dl.
+
+
+       -L     List groups of files with equal  contents,  separated  by  blank
               files.
 
 
        -S     Similar to -H, turn each group of files with equal contents into
-              symbolic  links  to one file. The file that is not turned into a
+              symbolic links to one file. The file that is not turned  into  a
               symbolic link is arbitrarily chosen.
 
 
        -b specifier...
-              Control file matching behavior. specifier is one or more of  the
-              following  specifiers.  By  default, fdup considers all cases as
+              Control  file matching behavior. specifier is one or more of the
+              following specifiers. By default, fdup considers  all  cases  as
               duplicate that can be detected as distinct files with the speci‐
               fiers below.
 
 
-              c      Files  with  different creation times are considered dis‐
+              c      Files with different creation times are  considered  dis‐
                      tinct
 
               d      Files on different devices are considered distinct
@@ -52,7 +60,7 @@ OPTIONS
 
               l      Hardlinks to the same file are considered distinct
 
-              m      Files with different modification  times  are  considered
+              m      Files  with  different  modification times are considered
                      distinct
 
               p      Files with different permissions are considered distinct
@@ -64,19 +72,19 @@ OPTIONS
 
 
        -s n[,m]
-              Restrict  file  size when looking for duplicates. If used in the
-              form -s n, fdup ignores all files that are less than n bytes  in
-              size.   If  used in the form -s n,m, fdup ignores all files that
-              are less than n or more than m bytes in size. If you don't  want
-              to  specify  a  lower  boundary,  use  -s  0,m. By default, fdup
+              Restrict file size when looking for duplicates. If used  in  the
+              form  -s n, fdup ignores all files that are less than n bytes in
+              size.  If used in the form -s n,m, fdup ignores all  files  that
+              are  less than n or more than m bytes in size. If you don't want
+              to specify a lower  boundary,  use  -s  0,m.  By  default,  fdup
               behaves as if -s 0 has been given.
 
-              Suffixes K, M, G, T, P and  E  can  be  used  to  specify  1024,
+              Suffixes  K,  M,  G,  T,  P  and  E can be used to specify 1024,
               1024*1024, 1024*1024*1024 etc. bytes.
 
-              This  option  can speed up operation if you are scanning a large
-              amount of small files but don't care about duplicates  in  them,
-              or  if you don't want fdup to scan through very large files that
+              This option can speed up operation if you are scanning  a  large
+              amount  of  small files but don't care about duplicates in them,
+              or if you don't want fdup to scan through very large files  that
               are known not to be duplicates.
 
 
@@ -85,14 +93,16 @@ OPTIONS
 
 
 BUGS
-       When  using the option -H, fdup is known to have problems when too many
-       files are considered equal
+       When using the option -H, fdup is known to have problems when too  many
+       files  are  considered  equal. fdup currrently does not correctly apply
+       permissions when  working  in  a  mode  that  overwrites,  rewrites  or
+       replaces files.
 
        Please file bugs at <https://github.com/fuzxxl/fdup/issues>.
 
 
 COPYRIGHT
-       This program, its source code and this  manpage  is  licensed  under  a
+       This  program,  its  source  code  and this manpage is licensed under a
        2-clause BSD license. See file COPYING for details.
 
 

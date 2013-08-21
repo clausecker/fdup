@@ -39,12 +39,14 @@
 
 #include <openssl/sha.h>
 
+#include "btrfs.h"
 #include "match.h"
 
 static enum {
 	LIST_DUPS_MODE,
 	HARD_LINK_MODE,
-	SOFT_LINK_MODE
+	SOFT_LINK_MODE,
+	BTRFS_COPY_MODE
 } operation_mode = LIST_DUPS_MODE;
 
 static struct matcher *m;
@@ -141,7 +143,7 @@ static int make_links(struct matcher *m, link_func f) {
 }
 
 static void help(const char *program) {
-	printf("Usage: %s [-H | -L | -S] [-hx] [-b cdglmpu] [-s n[,m]] directory...\n",program);
+	printf("Usage: %s [-B | -H | -L | -S] [-hx] [-b cdglmpu] [-s n[,m]] directory...\n",program);
 }
 
 /* apply kilo, mega, giga etc. suffix */
@@ -165,18 +167,21 @@ int main(int argc, char *argv[]) {
 	int xdev = 0;
 	char *argrmdr;
 
-	while ((opt = getopt(argc,argv,"SHLb:hs:x")) != -1) {
+	while ((opt = getopt(argc,argv,"BHLSb:hs:x")) != -1) {
 		switch(opt) {
+		case 'B':
+			operation_mode = BTRFS_COPY_MODE;
+			break;
+		case 'H':
+			operation_mode = HARD_LINK_MODE;
+			flags |= M_DEV|M_LINK; /* avoid a quirk in rename */
+			break;
 		case 'L':
 			operation_mode = LIST_DUPS_MODE;
 			break;
 		case 'S':
 			operation_mode = SOFT_LINK_MODE;
 			break;
-		case 'H':
-			operation_mode = HARD_LINK_MODE;
-			flags |= M_LINK; /* avoid a quirk in rename */
-			/* intentional fallthrough */
 		case 'x':
 			xdev = 1;
 			break;
@@ -255,9 +260,10 @@ int main(int argc, char *argv[]) {
 	if (finalize_matcher(m)) return 1;
 
 	switch (operation_mode) {
-	case LIST_DUPS_MODE: ok = print_dups(m); break;
-	case HARD_LINK_MODE: ok = make_links(m,link); break;
-	case SOFT_LINK_MODE: ok = make_links(m,symlink); break;
+	case LIST_DUPS_MODE:  ok = print_dups(m); break;
+	case HARD_LINK_MODE:  ok = make_links(m,link); break;
+	case SOFT_LINK_MODE:  ok = make_links(m,symlink); break;
+	case BTRFS_COPY_MODE: ok = make_links(m,btrfs_clone); break;
 	}
 
 	if (!ok) return 1;

@@ -22,7 +22,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE. */
 
-#define _XOPEN_SOURCE 500
+#define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
+#define _FILE_OFFSET_BITS 64
+
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/types.h>

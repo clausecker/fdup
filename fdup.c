@@ -112,11 +112,11 @@ static int perform_link(link_func f, const char *old, const char *new) {
 	free(new_dup);
 
 	if (f(old,tmp) == -1) {
-		fprintf(stderr,"Cannot link %s to %s",old,tmp);
+		fprintf(stderr,"Cannot link %s to %s: ",old,tmp);
 		perror(NULL);
 		rval = 1;
 	} else if (rename(tmp,new) == -1) {
-		fprintf(stderr,"Cannot rename %s to %s",tmp,new);
+		fprintf(stderr,"Cannot rename %s to %s: ",tmp,new);
 		perror(NULL);
 		rval = 1;
 	}

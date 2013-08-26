@@ -92,7 +92,12 @@ static int print_dups(struct matcher *m) {
 
 typedef int link_func(const char*,const char*);
 
-static int perform_link(link_func do_link, const char *old, const char *new) {
+static int perform_link(
+	link_func do_link,
+	const char *old,
+	const char *new,
+	int preserve) {
+
 	char *tmp, *new_dup;
 	int len;
 	struct stat newstat;
@@ -141,7 +146,10 @@ static int perform_link(link_func do_link, const char *old, const char *new) {
 			"Cannot set modification and access times of file %s.\n"
 			"Times on file %s will be clobbered: ",tmp,new);
 		perror(NULL);
-		/* Just a warning, carry on */
+		if (preserve) {
+			free(tmp);
+			return -1;
+		}
 	}
 
 	/* permissions and ownership do not make sense on symbolic links */
@@ -152,7 +160,10 @@ static int perform_link(link_func do_link, const char *old, const char *new) {
 			"Cannot set permission of file %s.\n"
 			"Permission of file %s will be clobbered: ",tmp,new);
 		perror(NULL);
-		/* Just a warning, carry on */
+		if (preserve) {
+			free(tmp);
+			return -1;
+		}
 	}
 
 	if (chown(tmp,newstat.st_uid,newstat.st_gid) == -1) {
@@ -160,7 +171,10 @@ static int perform_link(link_func do_link, const char *old, const char *new) {
 			"Cannot set ownership of file %s.\n"
 			"Ownership of file %s will be clobbered: ",tmp,new);
 		perror(NULL);
-		/* Just a warning, carry on */
+		if (preserve) {
+			free(tmp);
+			return -1;
+		}
 	}
 
 	skip_preservation:
@@ -176,7 +190,7 @@ static int perform_link(link_func do_link, const char *old, const char *new) {
 	return 0;
 }
 
-static int make_links(struct matcher *m, link_func f) {
+static int make_links(struct matcher *m, int preserve, link_func f) {
 	const char *orig, *dup;
 	int link_count = 0, pair_count = 0;
 
@@ -184,7 +198,7 @@ static int make_links(struct matcher *m, link_func f) {
 		pair_count++;
 		while ((dup = next_file(m))) {
 			link_count++;
-			if (perform_link(f,orig,dup)) return 1;
+			if (perform_link(f,orig,dup,preserve)) return 1;
 			fprintf(stderr,"\rMade %9d links for %9d groups",link_count,pair_count);
 		}
 	}
@@ -193,7 +207,7 @@ static int make_links(struct matcher *m, link_func f) {
 }
 
 static void help(const char *program) {
-	printf("Usage: %s [-B | -H | -L | -S] [-hx] [-b cdglmpu] [-s n[,m]] directory...\n",program);
+	printf("Usage: %s [-B | -H | -L | -S] [-hpx] [-b cdglmpu] [-s n[,m]] directory...\n",program);
 }
 
 /* apply kilo, mega, giga etc. suffix */
@@ -214,10 +228,10 @@ int main(int argc, char *argv[]) {
 	rlim_t maxfiles;
 	struct rlimit limit;
 	matcher_flags flags = 0;
-	int xdev = 0;
+	int xdev = 0, preserve = 0;
 	char *argrmdr;
 
-	while ((opt = getopt(argc,argv,"BHLSb:hs:x")) != -1) {
+	while ((opt = getopt(argc,argv,"BHLSb:hps:x")) != -1) {
 		switch(opt) {
 		case 'B':
 			operation_mode = BTRFS_COPY_MODE;
@@ -249,6 +263,9 @@ int main(int argc, char *argv[]) {
 				fprintf(stderr,"Unknown specifier %c to -b\n",*optarg);
 				return 2;
 			}
+			break;
+		case 'p':
+			preserve = 1;
 			break;
 		case 's':
 			if (*optarg == '\0') {
@@ -311,9 +328,9 @@ int main(int argc, char *argv[]) {
 
 	switch (operation_mode) {
 	case LIST_DUPS_MODE:  ok = print_dups(m); break;
-	case HARD_LINK_MODE:  ok = make_links(m,link); break;
-	case SOFT_LINK_MODE:  ok = make_links(m,symlink); break;
-	case BTRFS_COPY_MODE: ok = make_links(m,btrfs_clone); break;
+	case HARD_LINK_MODE:  ok = make_links(m,preserve,link); break;
+	case SOFT_LINK_MODE:  ok = make_links(m,preserve,symlink); break;
+	case BTRFS_COPY_MODE: ok = make_links(m,preserve,btrfs_clone); break;
 	}
 
 	if (!ok) return 1;

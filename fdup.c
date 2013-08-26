@@ -92,9 +92,11 @@ static int print_dups(struct matcher *m) {
 
 typedef int link_func(const char*,const char*);
 
-static int perform_link(link_func f, const char *old, const char *new) {
+static int perform_link(link_func do_link, const char *old, const char *new) {
 	char *tmp, *new_dup;
-	int rval = 0, len;
+	int len;
+	struct stat newstat;
+	struct timespec timespecs[2];
 
 	new_dup = strdup(new);
 	if (new_dup == NULL) {
@@ -102,7 +104,7 @@ static int perform_link(link_func f, const char *old, const char *new) {
 		return 1;
 	}
 
-	/* /fdup.##########.tmp */
+	/* /fdup.##########.tmp where ########## refers to the pid */
 	len = strlen(new_dup) + 21;
 
 	tmp = malloc(len);
@@ -114,19 +116,64 @@ static int perform_link(link_func f, const char *old, const char *new) {
 	snprintf(tmp,len,"%s/fdup.%010d.tmp",dirname(new_dup),getpid());
 	free(new_dup);
 
-	if (f(old,tmp) == -1) {
+	if (do_link(old,tmp) == -1) {
 		fprintf(stderr,"Cannot link %s to %s: ",old,tmp);
 		perror(NULL);
-		rval = 1;
-	} else if (rename(tmp,new) == -1) {
+		free(tmp);
+		return -1;
+	}
+
+	if (stat(new,&newstat) == -1) {
+		fprintf(stderr,"Cannot call stat on %s: ",new);
+		perror(NULL);
+		free(tmp);
+		return -1;
+	}
+
+	/* call utimes first as chmod and chown may disallow this */
+	timespecs[0].tv_sec = newstat.st_atime;
+	timespecs[0].tv_nsec = 0;
+	timespecs[1].tv_sec = newstat.st_mtime;
+	timespecs[1].tv_nsec = 0;
+
+	if (utimensat(AT_FDCWD,tmp,timespecs,AT_SYMLINK_NOFOLLOW) == -1) {
+		fprintf(stderr,
+			"Cannot set modification and access times of file %s.\n"
+			"Times on file %s will be clobbered: ",tmp,new);
+		perror(NULL);
+		/* Just a warning, carry on */
+	}
+
+	/* permissions and ownership do not make sense on symbolic links */
+	if (do_link == symlink) goto skip_preservation;
+
+	if (chmod(tmp,newstat.st_mode) == -1) {
+		fprintf(stderr,
+			"Cannot set permission of file %s.\n"
+			"Permission of file %s will be clobbered: ",tmp,new);
+		perror(NULL);
+		/* Just a warning, carry on */
+	}
+
+	if (chown(tmp,newstat.st_uid,newstat.st_gid) == -1) {
+		fprintf(stderr,
+			"Cannot set ownership of file %s.\n"
+			"Ownership of file %s will be clobbered: ",tmp,new);
+		perror(NULL);
+		/* Just a warning, carry on */
+	}
+
+	skip_preservation:
+
+	if (rename(tmp,new) == -1) {
 		fprintf(stderr,"Cannot rename %s to %s: ",tmp,new);
 		perror(NULL);
-		rval = 1;
+		free(tmp);
+		return -1;
 	}
 
 	free(tmp);
-
-	return rval;
+	return 0;
 }
 
 static int make_links(struct matcher *m, link_func f) {

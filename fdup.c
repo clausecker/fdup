@@ -45,21 +45,16 @@
 #include "btrfs.h"
 #include "match.h"
 
-static enum {
-	LIST_DUPS_MODE,
-	HARD_LINK_MODE,
-	SOFT_LINK_MODE,
-	BTRFS_COPY_MODE
-} operation_mode = LIST_DUPS_MODE;
-
-static struct matcher *m;
+/* these variables have to be global as it is not possible to supply an extra
+ * argument to the function passed to nftw. The only way to supply extra data
+ * to walker are in fact global variables. */
+static struct matcher *matcher;
 static off_t lower_boundary = 0;
 static off_t upper_boundary = 0;
 static int has_upper_boundary = 0;
 static int verbose = 0;
 
-static int print_walker(const char *fpath,const struct stat *sb,int tf,struct FTW *ftwbuf) {
-
+static int walker(const char *fpath,const struct stat *sb,int tf,struct FTW *ftwbuf) {
 	/* silence warnings */
 	(void)tf;
 	(void)ftwbuf;
@@ -68,9 +63,9 @@ static int print_walker(const char *fpath,const struct stat *sb,int tf,struct FT
 	if (sb->st_size < lower_boundary) return 0;
 	if (has_upper_boundary && sb->st_size > upper_boundary) return 0;
 
-	if (register_file(m,fpath,sb)) return 1;
+	if (register_file(matcher,fpath,sb)) return 1;
 
-	if (verbose) fprintf(stderr,"\r%9d files",get_file_count(m));
+	if (verbose) fprintf(stderr,"\r%9d files",get_file_count(matcher));
 
 	return 0;
 }
@@ -222,7 +217,7 @@ static off_t adjust_suffix(off_t n, char suffix) {
 	case 'P': return n << 50;
 	case 'E': return n << 60;
 	default: return n;
-}
+	}
 }
 
 int main(int argc, char *argv[]) {
@@ -232,21 +227,27 @@ int main(int argc, char *argv[]) {
 	matcher_flags flags = 0;
 	int xdev = 0, preserve = 0;
 	char *argrmdr;
+	enum {
+		LIST_DUPS_MODE,
+		HARD_LINK_MODE,
+		SOFT_LINK_MODE,
+		BTRFS_COPY_MODE
+	} mode = LIST_DUPS_MODE;
 
 	while ((opt = getopt(argc,argv,"BHLSb:hps:vx")) != -1) {
 		switch(opt) {
 		case 'B':
-			operation_mode = BTRFS_COPY_MODE;
+			mode = BTRFS_COPY_MODE;
 			break;
 		case 'H':
-			operation_mode = HARD_LINK_MODE;
+			mode = HARD_LINK_MODE;
 			flags |= M_DEV|M_LINK; /* avoid a quirk in rename */
 			break;
 		case 'L':
-			operation_mode = LIST_DUPS_MODE;
+			mode = LIST_DUPS_MODE;
 			break;
 		case 'S':
-			operation_mode = SOFT_LINK_MODE;
+			mode = SOFT_LINK_MODE;
 			break;
 		case 'b':
 			optarg--;
@@ -312,7 +313,7 @@ int main(int argc, char *argv[]) {
 		return 2;
 	}
 
-	m = new_matcher(flags);
+	matcher = new_matcher(flags);
 
 	/* attempt to use as many files as possible */
 	getrlimit(RLIMIT_NOFILE,&limit);
@@ -321,7 +322,7 @@ int main(int argc, char *argv[]) {
 	if (verbose) fputs("Scanning file system...\n",stderr);
 
 	for (i = optind; i < argc; i++) {
-		ok = nftw(argv[i],print_walker,maxfiles,FTW_PHYS|(xdev?FTW_MOUNT:0));
+		ok = nftw(argv[i],walker,maxfiles,FTW_PHYS|(xdev?FTW_MOUNT:0));
 		if (ok == -1) {
 			fprintf(stderr,"\nError processing argument %s: ",argv[i]);
 			perror(NULL);
@@ -329,18 +330,18 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (verbose) fputs("\nLooking for duplicates...\n",stderr);
-	if (finalize_matcher(m)) return 1;
+	if (finalize_matcher(matcher)) return 1;
 
-	switch (operation_mode) {
-	case LIST_DUPS_MODE:  ok = print_dups(m); break;
-	case HARD_LINK_MODE:  ok = make_links(m,preserve,link); break;
-	case SOFT_LINK_MODE:  ok = make_links(m,preserve,symlink); break;
-	case BTRFS_COPY_MODE: ok = make_links(m,preserve,btrfs_clone); break;
+	switch (mode) {
+	case LIST_DUPS_MODE:  ok = print_dups(matcher); break;
+	case HARD_LINK_MODE:  ok = make_links(matcher,preserve,link); break;
+	case SOFT_LINK_MODE:  ok = make_links(matcher,preserve,symlink); break;
+	case BTRFS_COPY_MODE: ok = make_links(matcher,preserve,btrfs_clone); break;
 	}
 
 	if (!ok) return 1;
 
-	free_matcher(m);
+	free_matcher(matcher);
 
 	return 0;
 }

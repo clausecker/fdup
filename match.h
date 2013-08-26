@@ -25,9 +25,6 @@
 #ifndef FIND_H
 #define FIND_H
 
-/* for struct stat */
-#include <sys/stat.h>
-
 typedef enum {
 	M_LINK  = 0x01, /* Are hardlinks to the same file distinct? */
 	M_CTIME = 0x02, /* Are files with distinct creation time distinct? */
@@ -41,7 +38,7 @@ typedef enum {
 /* returns NULL on error with errno set appropriately */
 struct matcher *new_matcher(matcher_flags);
 /* these function return 0 on success */
-int register_file(struct matcher*,const char *,const struct stat*);
+int register_file(struct matcher*,const char*,const struct stat*);
 int get_file_count(struct matcher*);
 int finalize_matcher(struct matcher*);
 /* return NULL if there is no next file in this group or no next group or 

@@ -12,8 +12,7 @@ fdup \- find duplicates
 
 .SH DESCRIPTION
 \fBfdup\fR traverses the supplied directories and finds file with equal
-contents. \fBfdup\fR outputs statistics to \fBstderr\fR(3) while processing
-files. \fBfdup\fR will not follow symbolic links it encounters.
+contents. \fBfdup\fR will not follow symbolic links it encounters.
 
 .SH OPTIONS
 
@@ -105,6 +104,11 @@ to specify 1024, 1024*1024, 1024*1024*1024 etc. bytes.
 This option can speed up operation if you are scanning a large amount of small
 files but don't care about duplicates in them, or if you don't want \fBfdup\fR
 to scan through very large files that are known not to be duplicates.
+
+.TP
+.B \-v
+Outputs statistics to \fBstderr\fR(3) while processing files. These statistics
+can be useful as a progress indicator.
 
 .TP
 .B \-x

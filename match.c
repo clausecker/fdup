@@ -47,8 +47,9 @@ typedef unsigned char sha_hash[SHA_DIGEST_LENGTH];
 struct fileinfo {
 	struct stat stat;
 	off_t path; /* pointer into filename file */
-	bool hashed; /* true iff hash has been calculated already */
+	int hashed; /* 0: no hash; 1: short hash; 2: full hash */
 	sha_hash hash;
+	sha_hash short_hash;
 };
 
 struct matcher {
@@ -62,13 +63,18 @@ struct matcher {
 	bool finalized;
 };
 
-#define BUFSIZE (16*1024)
+enum {
+	HAS_SHORT_HASH = 1,
+	HAS_FULL_HASH = 2,
+	SHORT_HASH_SIZE = 16*1024*1024,
+	BUFSIZE = 16*1024,
+};
 
 /* hack: qsort does not allow an extra parameter so we instead store the
  * paremeter in this thread-local variable. */
 static struct matcher *cmp_matcher;
 static int cmp_fileinfo(struct fileinfo*,struct fileinfo*);
-static int file_sha1(sha_hash,const char *);
+static int file_sha1(sha_hash,const char*,off_t);
 
 struct matcher *new_matcher(matcher_flags f) {
 	FILE *names, *infos;
@@ -223,6 +229,7 @@ int finalize_matcher(struct matcher *m) {
 static int cmp_fileinfo(struct fileinfo *a,struct fileinfo *b) {
 	matcher_flags f = cmp_matcher->flags;
 	const char *names = cmp_matcher->name_map;
+	int cmp;
 
 	if (a == b) return 0;
 
@@ -239,19 +246,37 @@ static int cmp_fileinfo(struct fileinfo *a,struct fileinfo *b) {
 	if (f & M_MTIME) CMP_BY(st_mtime);
 	if (f & M_CTIME) CMP_BY(st_ctime);
 
-	if (!a->hashed) file_sha1(a->hash,names+a->path);
-	if (!b->hashed) file_sha1(b->hash,names+b->path);
+	if (a->hashed & HAS_SHORT_HASH) {
+		file_sha1(a->short_hash,names+a->path,SHORT_HASH_SIZE);
+		a->hashed |= HAS_SHORT_HASH;
+	}
 
-	a->hashed = true;
-	b->hashed = true;
+	if (b->hashed & HAS_SHORT_HASH) {
+		file_sha1(b->short_hash,names+b->path,SHORT_HASH_SIZE);
+		b->hashed |= HAS_SHORT_HASH;
+	}
+
+	cmp = memcmp(a->short_hash,b->short_hash,SHA_DIGEST_LENGTH);
+
+	if (cmp != 0) return cmp;
+
+	if (a->hashed & HAS_FULL_HASH) {
+		file_sha1(a->hash,names+a->path,a->stat.st_size);
+		a->hashed |= HAS_FULL_HASH;
+	}
+
+	if (b->hashed & HAS_FULL_HASH) {
+		file_sha1(b->hash,names+b->path,b->stat.st_size);
+		b->hashed |= HAS_FULL_HASH;
+	}
 
 	return memcmp(a->hash,b->hash,SHA_DIGEST_LENGTH);
 }
 
 #undef CMP_BY
 
-/* returns 1 on success, 0 on failure */
-static int file_sha1(sha_hash hash, const char *filepath) {
+/* returns 1 on success, 0 on failure. Hashes first length bytes */
+static int file_sha1(sha_hash hash, const char *filepath, off_t length) {
 	unsigned char buf[BUFSIZE];
 	SHA_CTX sha;
 	ssize_t count;
@@ -262,8 +287,9 @@ static int file_sha1(sha_hash hash, const char *filepath) {
 
 	SHA1_Init(&sha);
 
-	while ((count = read(fd,buf,BUFSIZE)) > 0) {
-		SHA1_Update(&sha,buf,count);
+	while (length > 0 && (count = read(fd,buf,BUFSIZE)) > 0) {
+		SHA1_Update(&sha,buf,count<length?count:length);
+		length -= count < length ? count : length;
 	}
 
 	if (count < 0) {

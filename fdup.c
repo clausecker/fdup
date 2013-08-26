@@ -54,6 +54,15 @@ static off_t upper_boundary = 0;
 static int has_upper_boundary = 0;
 static int verbose = 0;
 
+typedef int link_func(const char*,const char*);
+
+static off_t adjust_suffix(off_t,char);
+static void help(const char *);
+static int make_links(struct matcher*,int,link_func);
+static int perform_link(link_func,const char*,const char*,int);
+static int print_dups(struct matcher*);
+static int walker(const char*,const struct stat*,int,struct FTW*);
+
 static int walker(const char *fpath,const struct stat *sb,int tf,struct FTW *ftwbuf) {
 	/* silence warnings */
 	(void)tf;
@@ -85,8 +94,6 @@ static int print_dups(struct matcher *m) {
 
 	return 0;
 }
-
-typedef int link_func(const char*,const char*);
 
 static int perform_link(
 	link_func do_link,

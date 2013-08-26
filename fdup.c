@@ -56,6 +56,7 @@ static struct matcher *m;
 static off_t lower_boundary = 0;
 static off_t upper_boundary = 0;
 static int has_upper_boundary = 0;
+static int verbose = 0;
 
 static int print_walker(const char *fpath,const struct stat *sb,int tf,struct FTW *ftwbuf) {
 
@@ -69,7 +70,7 @@ static int print_walker(const char *fpath,const struct stat *sb,int tf,struct FT
 
 	if (register_file(m,fpath,sb)) return 1;
 
-	fprintf(stderr,"\r%9d files",get_file_count(m));
+	if (verbose) fprintf(stderr,"\r%9d files",get_file_count(m));
 
 	return 0;
 }
@@ -199,7 +200,8 @@ static int make_links(struct matcher *m, int preserve, link_func f) {
 		while ((dup = next_file(m))) {
 			link_count++;
 			if (perform_link(f,orig,dup,preserve)) return 1;
-			fprintf(stderr,"\rMade %9d links for %9d groups",link_count,pair_count);
+			if (verbose) fprintf(stderr,
+				"\rMade %9d links for %9d groups",link_count,pair_count);
 		}
 	}
 
@@ -207,7 +209,7 @@ static int make_links(struct matcher *m, int preserve, link_func f) {
 }
 
 static void help(const char *program) {
-	printf("Usage: %s [-B | -H | -L | -S] [-hpx] [-b cdglmpu] [-s n[,m]] directory...\n",program);
+	printf("Usage: %s [-B | -H | -L | -S] [-hpvx] [-b cdglmpu] [-s n[,m]] directory...\n",program);
 }
 
 /* apply kilo, mega, giga etc. suffix */
@@ -231,7 +233,7 @@ int main(int argc, char *argv[]) {
 	int xdev = 0, preserve = 0;
 	char *argrmdr;
 
-	while ((opt = getopt(argc,argv,"BHLSb:hps:x")) != -1) {
+	while ((opt = getopt(argc,argv,"BHLSb:hps:vx")) != -1) {
 		switch(opt) {
 		case 'B':
 			operation_mode = BTRFS_COPY_MODE;
@@ -245,9 +247,6 @@ int main(int argc, char *argv[]) {
 			break;
 		case 'S':
 			operation_mode = SOFT_LINK_MODE;
-			break;
-		case 'x':
-			xdev = 1;
 			break;
 		case 'b':
 			optarg--;
@@ -295,6 +294,12 @@ int main(int argc, char *argv[]) {
 
 			if (*argrmdr != '\0') upper_boundary = adjust_suffix(upper_boundary,*argrmdr);
 			break;
+		case 'v':
+			verbose = 1;
+			break;
+		case 'x':
+			xdev = 1;
+			break;
 		case 'h':
 		default:
 			help(argv[0]);
@@ -313,7 +318,7 @@ int main(int argc, char *argv[]) {
 	getrlimit(RLIMIT_NOFILE,&limit);
 	maxfiles = limit.rlim_cur - 8; /* spare some file descriptors */
 
-	fputs("Scanning file system...\n",stderr);
+	if (verbose) fputs("Scanning file system...\n",stderr);
 
 	for (i = optind; i < argc; i++) {
 		ok = nftw(argv[i],print_walker,maxfiles,FTW_PHYS|(xdev?FTW_MOUNT:0));
@@ -323,7 +328,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	fputs("\nLooking for duplicates...\n",stderr);
+	if (verbose) fputs("\nLooking for duplicates...\n",stderr);
 	if (finalize_matcher(m)) return 1;
 
 	switch (operation_mode) {

@@ -22,7 +22,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE. */
 
-#define _XOPEN_SOURCE 500
+#define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
+#define _FILE_OFFSET_BITS 64
+
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/types.h>
@@ -89,9 +92,16 @@ static int print_dups(struct matcher *m) {
 
 typedef int link_func(const char*,const char*);
 
-static int perform_link(link_func f, const char *old, const char *new) {
+static int perform_link(
+	link_func do_link,
+	const char *old,
+	const char *new,
+	int preserve) {
+
 	char *tmp, *new_dup;
-	int rval = 0, len;
+	int len;
+	struct stat newstat;
+	struct timespec timespecs[2];
 
 	new_dup = strdup(new);
 	if (new_dup == NULL) {
@@ -99,7 +109,7 @@ static int perform_link(link_func f, const char *old, const char *new) {
 		return 1;
 	}
 
-	/* /fdup.##########.tmp */
+	/* /fdup.##########.tmp where ########## refers to the pid */
 	len = strlen(new_dup) + 21;
 
 	tmp = malloc(len);
@@ -111,22 +121,76 @@ static int perform_link(link_func f, const char *old, const char *new) {
 	snprintf(tmp,len,"%s/fdup.%010d.tmp",dirname(new_dup),getpid());
 	free(new_dup);
 
-	if (f(old,tmp) == -1) {
-		fprintf(stderr,"Cannot link %s to %s",old,tmp);
+	if (do_link(old,tmp) == -1) {
+		fprintf(stderr,"Cannot link %s to %s: ",old,tmp);
 		perror(NULL);
-		rval = 1;
-	} else if (rename(tmp,new) == -1) {
-		fprintf(stderr,"Cannot rename %s to %s",tmp,new);
+		free(tmp);
+		return -1;
+	}
+
+	if (stat(new,&newstat) == -1) {
+		fprintf(stderr,"Cannot call stat on %s: ",new);
 		perror(NULL);
-		rval = 1;
+		free(tmp);
+		return -1;
+	}
+
+	/* call utimes first as chmod and chown may disallow this */
+	timespecs[0].tv_sec = newstat.st_atime;
+	timespecs[0].tv_nsec = 0;
+	timespecs[1].tv_sec = newstat.st_mtime;
+	timespecs[1].tv_nsec = 0;
+
+	if (utimensat(AT_FDCWD,tmp,timespecs,AT_SYMLINK_NOFOLLOW) == -1) {
+		fprintf(stderr,
+			"Cannot set modification and access times of file %s.\n"
+			"Times on file %s will be clobbered: ",tmp,new);
+		perror(NULL);
+		if (preserve) {
+			free(tmp);
+			return -1;
+		}
+	}
+
+	/* permissions and ownership do not make sense on symbolic links */
+	if (do_link == symlink) goto skip_preservation;
+
+	if (chmod(tmp,newstat.st_mode) == -1) {
+		fprintf(stderr,
+			"Cannot set permission of file %s.\n"
+			"Permission of file %s will be clobbered: ",tmp,new);
+		perror(NULL);
+		if (preserve) {
+			free(tmp);
+			return -1;
+		}
+	}
+
+	if (chown(tmp,newstat.st_uid,newstat.st_gid) == -1) {
+		fprintf(stderr,
+			"Cannot set ownership of file %s.\n"
+			"Ownership of file %s will be clobbered: ",tmp,new);
+		perror(NULL);
+		if (preserve) {
+			free(tmp);
+			return -1;
+		}
+	}
+
+	skip_preservation:
+
+	if (rename(tmp,new) == -1) {
+		fprintf(stderr,"Cannot rename %s to %s: ",tmp,new);
+		perror(NULL);
+		free(tmp);
+		return -1;
 	}
 
 	free(tmp);
-
-	return rval;
+	return 0;
 }
 
-static int make_links(struct matcher *m, link_func f) {
+static int make_links(struct matcher *m, int preserve, link_func f) {
 	const char *orig, *dup;
 	int link_count = 0, pair_count = 0;
 
@@ -134,7 +198,7 @@ static int make_links(struct matcher *m, link_func f) {
 		pair_count++;
 		while ((dup = next_file(m))) {
 			link_count++;
-			if (perform_link(f,orig,dup)) return 1;
+			if (perform_link(f,orig,dup,preserve)) return 1;
 			fprintf(stderr,"\rMade %9d links for %9d groups",link_count,pair_count);
 		}
 	}
@@ -143,7 +207,7 @@ static int make_links(struct matcher *m, link_func f) {
 }
 
 static void help(const char *program) {
-	printf("Usage: %s [-B | -H | -L | -S] [-hx] [-b cdglmpu] [-s n[,m]] directory...\n",program);
+	printf("Usage: %s [-B | -H | -L | -S] [-hpx] [-b cdglmpu] [-s n[,m]] directory...\n",program);
 }
 
 /* apply kilo, mega, giga etc. suffix */
@@ -164,10 +228,10 @@ int main(int argc, char *argv[]) {
 	rlim_t maxfiles;
 	struct rlimit limit;
 	matcher_flags flags = 0;
-	int xdev = 0;
+	int xdev = 0, preserve = 0;
 	char *argrmdr;
 
-	while ((opt = getopt(argc,argv,"BHLSb:hs:x")) != -1) {
+	while ((opt = getopt(argc,argv,"BHLSb:hps:x")) != -1) {
 		switch(opt) {
 		case 'B':
 			operation_mode = BTRFS_COPY_MODE;
@@ -199,6 +263,9 @@ int main(int argc, char *argv[]) {
 				fprintf(stderr,"Unknown specifier %c to -b\n",*optarg);
 				return 2;
 			}
+			break;
+		case 'p':
+			preserve = 1;
 			break;
 		case 's':
 			if (*optarg == '\0') {
@@ -261,9 +328,9 @@ int main(int argc, char *argv[]) {
 
 	switch (operation_mode) {
 	case LIST_DUPS_MODE:  ok = print_dups(m); break;
-	case HARD_LINK_MODE:  ok = make_links(m,link); break;
-	case SOFT_LINK_MODE:  ok = make_links(m,symlink); break;
-	case BTRFS_COPY_MODE: ok = make_links(m,btrfs_clone); break;
+	case HARD_LINK_MODE:  ok = make_links(m,preserve,link); break;
+	case SOFT_LINK_MODE:  ok = make_links(m,preserve,symlink); break;
+	case BTRFS_COPY_MODE: ok = make_links(m,preserve,btrfs_clone); break;
 	}
 
 	if (!ok) return 1;

@@ -80,6 +80,17 @@ Files owned by different users are considered distinct
 Print a brief help.
 
 .TP
+.B \-p
+Preserve permissions, ownership, modification and access times. If \fB\-p\fR is
+provided and \fBfdup\fR fails to correctly assign one of these attributes, no
+files are changed and \fBfdup\fR aborts. This differs from the behavior without
+\fB\-p\fR, in that otherwise only a warning is printed and \fBfdup\fR keeps
+going, possibly clobbering attributes of the file. \fBfdup\fR attempts to
+preserve attributes regardless of \fB\-p\fR. Please notice that \fB\-p\fR has
+no effect when used with \fB\-L\fR for obvious reasons. Only access and
+modification times are preserved when used with \fB\-S\fR.
+
+.TP
 \fB\-s \fIn\fR[,\fIm\fR]
 Restrict file size when looking for duplicates. If used in the form \fB\-s
 \fIn\fR, \fBfdup\fR ignores all files that are less than \fIn\fR bytes in size.
@@ -99,10 +110,15 @@ to scan through very large files that are known not to be duplicates.
 .B \-x
 Stay on one file system. This applies to each supplied directory individually.
 
+.SH EXIT STATUS
+\fBfdup\fR terminates with an exit status of 0 on success. If one of the
+operations \fBfdup\fR performs fails, its exit status is 1. If \fBfdup\fR does
+not recognize one of the command line options it was called with, it terminates
+with an exit status of 2.
+
 .SH BUGS
 When using the option \fB\-H\fR, \fBfdup\fR is known to have problems when too
-many files are considered equal. \fBfdup\fR currrently does not correctly apply
-permissions when working in a mode that overwrites, rewrites or replaces files.
+many files are considered equal.
 
 Please file bugs at <https://github.com/fuzxxl/fdup/issues>.
 

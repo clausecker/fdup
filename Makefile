@@ -29,9 +29,10 @@ REVISION=$(shell git rev-parse --short HEAD)
 
 LDLIBS=$(LFS_LIBS) -lcrypto
 LDFLAGS=$(LFS_LDFLAGS)
-CFLAGS=$(LFS_CFLAGS) -O3 -Wall -Wextra -pedantic -std=c1x
+CFLAGS=$(LFS_CFLAGS) -O3 -Wall -Wextra -pedantic -std=c99
 NROFF=nroff
 GIT=git
+CC?=gcc
 
 OBJ=btrfs.o fdup.o match.o
 

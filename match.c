@@ -23,6 +23,7 @@
  * POSSIBILITY OF SUCH DAMAGE. */
 
 #define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
 #define _FILE_OFFSET_BITS 64
 
 #include <sys/mman.h>
@@ -41,33 +42,14 @@
 
 #include "match.h"
 
-/* some compilers don't know _Thread_local from C11 yet */
-#ifndef thread_local
-# if __STDC_VERSION__ >= 201112 && !defined __STDC_NO_THREADS__
-#  define thread_local _Thread_local
-# elif defined _WIN32 && ( \
-       defined _MSC_VER || \
-       defined __ICL || \
-       defined __DMC__ || \
-       defined __BORLANDC__ )
-#  define thread_local __declspec(thread)
-/* note that ICC (linux) and Clang are covered by __GNUC__ */
-# elif defined __GNUC__ || \
-       defined __SUNPRO_C || \
-       defined __xlC__
-#  define thread_local __thread
-# else
-#  error "Cannot define thread_local"
-# endif
-#endif
-
 typedef unsigned char sha_hash[SHA_DIGEST_LENGTH];
 
 struct fileinfo {
 	struct stat stat;
 	off_t path; /* pointer into filename file */
-	bool hashed; /* true iff hash has been calculated already */
+	int hashed; /* 0: no hash; 1: short hash; 2: full hash */
 	sha_hash hash;
+	sha_hash short_hash;
 };
 
 struct matcher {
@@ -81,13 +63,18 @@ struct matcher {
 	bool finalized;
 };
 
-#define BUFSIZE (16*1024)
+enum {
+	HAS_SHORT_HASH = 1,
+	HAS_FULL_HASH = 2,
+	SHORT_HASH_SIZE = 16*1024*1024,
+	BUFSIZE = 16*1024,
+};
 
 /* hack: qsort does not allow an extra parameter so we instead store the
  * paremeter in this thread-local variable. */
-thread_local struct matcher *cmp_matcher;
+static struct matcher *cmp_matcher;
 static int cmp_fileinfo(struct fileinfo*,struct fileinfo*);
-static int file_sha1(sha_hash,const char *);
+static int file_sha1(sha_hash,const char*,off_t);
 
 struct matcher *new_matcher(matcher_flags f) {
 	FILE *names, *infos;
@@ -242,6 +229,7 @@ int finalize_matcher(struct matcher *m) {
 static int cmp_fileinfo(struct fileinfo *a,struct fileinfo *b) {
 	matcher_flags f = cmp_matcher->flags;
 	const char *names = cmp_matcher->name_map;
+	int cmp;
 
 	if (a == b) return 0;
 
@@ -258,19 +246,37 @@ static int cmp_fileinfo(struct fileinfo *a,struct fileinfo *b) {
 	if (f & M_MTIME) CMP_BY(st_mtime);
 	if (f & M_CTIME) CMP_BY(st_ctime);
 
-	if (!a->hashed) file_sha1(a->hash,names+a->path);
-	if (!b->hashed) file_sha1(b->hash,names+b->path);
+	if (a->hashed & HAS_SHORT_HASH) {
+		file_sha1(a->short_hash,names+a->path,SHORT_HASH_SIZE);
+		a->hashed |= HAS_SHORT_HASH;
+	}
 
-	a->hashed = true;
-	b->hashed = true;
+	if (b->hashed & HAS_SHORT_HASH) {
+		file_sha1(b->short_hash,names+b->path,SHORT_HASH_SIZE);
+		b->hashed |= HAS_SHORT_HASH;
+	}
+
+	cmp = memcmp(a->short_hash,b->short_hash,SHA_DIGEST_LENGTH);
+
+	if (cmp != 0) return cmp;
+
+	if (a->hashed & HAS_FULL_HASH) {
+		file_sha1(a->hash,names+a->path,a->stat.st_size);
+		a->hashed |= HAS_FULL_HASH;
+	}
+
+	if (b->hashed & HAS_FULL_HASH) {
+		file_sha1(b->hash,names+b->path,b->stat.st_size);
+		b->hashed |= HAS_FULL_HASH;
+	}
 
 	return memcmp(a->hash,b->hash,SHA_DIGEST_LENGTH);
 }
 
 #undef CMP_BY
 
-/* returns 1 on success, 0 on failure */
-static int file_sha1(sha_hash hash, const char *filepath) {
+/* returns 1 on success, 0 on failure. Hashes first length bytes */
+static int file_sha1(sha_hash hash, const char *filepath, off_t length) {
 	unsigned char buf[BUFSIZE];
 	SHA_CTX sha;
 	ssize_t count;
@@ -281,8 +287,9 @@ static int file_sha1(sha_hash hash, const char *filepath) {
 
 	SHA1_Init(&sha);
 
-	while ((count = read(fd,buf,BUFSIZE)) > 0) {
-		SHA1_Update(&sha,buf,count);
+	while (length > 0 && (count = read(fd,buf,BUFSIZE)) > 0) {
+		SHA1_Update(&sha,buf,count<length?count:length);
+		length -= count < length ? count : length;
 	}
 
 	if (count < 0) {

@@ -71,6 +71,17 @@ OPTIONS
        -h     Print a brief help.
 
 
+       -p     Preserve permissions, ownership, modification and access  times.
+              If  -p  is  provided  and  fdup fails to correctly assign one of
+              these attributes, no files are changed  and  fdup  aborts.  This
+              differs  from  the behavior without -p, in that otherwise only a
+              warning is printed and fdup  keeps  going,  possibly  clobbering
+              attributes  of  the  file.  fdup attempts to preserve attributes
+              regardless of -p. Please notice that -p has no effect when  used
+              with  -L for obvious reasons. Only access and modification times
+              are preserved when used with -S.
+
+
        -s n[,m]
               Restrict file size when looking for duplicates. If used  in  the
               form  -s n, fdup ignores all files that are less than n bytes in
@@ -92,17 +103,22 @@ OPTIONS
               individually.
 
 
+EXIT STATUS
+       fdup terminates with an exit status of 0 on  success.  If  one  of  the
+       operations  fdup performs fails, its exit status is 1. If fdup does not
+       recognize one of the command line options it was called with, it termi‐
+       nates with an exit status of 2.
+
+
 BUGS
-       When using the option -H, fdup is known to have problems when too  many
-       files  are  considered  equal. fdup currrently does not correctly apply
-       permissions when  working  in  a  mode  that  overwrites,  rewrites  or
-       replaces files.
+       When  using the option -H, fdup is known to have problems when too many
+       files are considered equal.
 
        Please file bugs at <https://github.com/fuzxxl/fdup/issues>.
 
 
 COPYRIGHT
-       This  program,  its  source  code  and this manpage is licensed under a
+       This program, its source code and this  manpage  is  licensed  under  a
        2-clause BSD license. See file COPYING for details.
 
 

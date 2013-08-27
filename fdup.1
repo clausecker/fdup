@@ -11,23 +11,23 @@ fdup \- find duplicates
 .IR directory ...
 
 .SH DESCRIPTION
-\fBfdup\fR traverses the supplied directories and finds file with equal
+\fBfdup\fR traverses the supplied directories and finds files with equal
 contents. \fBfdup\fR will not follow symbolic links it encounters.
 
 .SH OPTIONS
 
 This utility has four modes of operation. These are selected with the options
 \fB-B\fR, \fB\-H\fR, \fB\-L\fR and \fB\-S\fR. If none of these options is
-given, \fBfdup\fR behaves as if \fB\-S\fR was selected. If more than one mode
-of operation is given, only the last mode that was passed counts.
+provided, \fBfdup\fR behaves as if \fB\-S\fR was selected. If more than one
+mode of operation is provided, only the last mode that was passed counts.
 
 .TP
 .B \-B
 Turn files with equal contents into \fBbtrfs\fR(8) lightweight copies of each
 other. A lightweight or COW copy shares the underlying disk space with the
-original file until you change it, but has no other connections to the original
-file. This mode is preferable where applicable. This option only works on Linux
-with files on \fBbtrfs\fR file systems and implies \fB-b \fId\fR.
+original file until it is altered, but has no other connections to the original
+file. This option only works on Linux with files on \fBbtrfs\fR file systems
+and implies \fB-b \fId\fR.
 
 .TP
 .B \-H
@@ -76,7 +76,8 @@ Files owned by different users are considered distinct
 
 .TP
 .B \-h
-Print a brief help.
+Print a synopsis of \fBfdup\fR's command line options and then terminate with
+an exit status of 0.
 
 .TP
 .B \-p
@@ -99,7 +100,7 @@ specify a lower boundary, use \fB\-s \fI0\fR,\fIm\fR. By default, \fBfdup\fR
 behaves as if \fB\-s \fI0\fR has been given.
 
 Suffixes \fIK\fR, \fIM\fR, \fIG\fR, \fIT\fR, \fIP\fR and \fIE\fR can be used
-to specify 1024, 1024*1024, 1024*1024*1024 etc. bytes.
+to specify 1024, 1024*1024, 1024*1024*1024,... bytes.
 
 This option can speed up operation if you are scanning a large amount of small
 files but don't care about duplicates in them, or if you don't want \fBfdup\fR

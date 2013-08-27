@@ -41,17 +41,22 @@
 #include "action.h"
 #include "btrfs.h"
 
+struct bounds {
+	off_t lower;
+	off_t upper;
+	int has_upper;
+};
+
 /* these variables have to be global as it is not possible to supply an extra
  * argument to the function passed to nftw. The only way to supply extra data
  * to walker are in fact global variables. */
 static struct matcher *matcher;
-static off_t lower_boundary = 0;
-static off_t upper_boundary = 0;
-static int has_upper_boundary = 0;
+static struct bounds bounds = { 0, 0, 0 };
 static int verbose = 0;
 
 static off_t adjust_suffix(off_t,char);
 static void help(const char *);
+static int parse_bounds(struct bounds*,const char*);
 static int walker(const char*,const struct stat*,int,struct FTW*);
 
 static int walker(const char *fpath,const struct stat *sb,int tf,struct FTW *ftwbuf) {
@@ -60,8 +65,8 @@ static int walker(const char *fpath,const struct stat *sb,int tf,struct FTW *ftw
 	(void)ftwbuf;
 
 	if (!S_ISREG(sb->st_mode)) return 0;
-	if (sb->st_size < lower_boundary) return 0;
-	if (has_upper_boundary && sb->st_size > upper_boundary) return 0;
+	if (sb->st_size < bounds.lower) return 0;
+	if (bounds.has_upper && sb->st_size > bounds.upper) return 0;
 
 	if (register_file(matcher,fpath,sb)) return 1;
 
@@ -87,13 +92,43 @@ static off_t adjust_suffix(off_t n, char suffix) {
 	}
 }
 
+static int parse_bounds(struct bounds *b, const char *input) {
+	char *rest;
+
+	if (*input == '\0') return 1;
+
+	b->lower = strtoll(input,&rest,10);
+	if (strchr(",KMGTPE",*rest) == NULL) {
+		fprintf(stderr,"Unexpected character %c in string to -s\n",*rest);
+		return 1;
+	}
+	if (*rest != '\0' && *rest != ',') b->lower = adjust_suffix(b->lower,*rest++);
+	if (*rest == ',') rest++;
+	if (*rest == '\0') {
+		b->has_upper = 0;
+		return 0;
+	}
+
+	b->has_upper = 1;
+	input = rest;
+	b->upper = strtoll(input,&rest,10);
+
+	if (strchr("KMGTPE",*rest) == NULL) {
+		fprintf(stderr,"Unexpected character %c in string to -s\n",*rest);
+		return 1;
+	}
+
+	if (*rest != '\0') b->upper = adjust_suffix(b->upper,*rest);
+
+	return 0;
+}
+
 int main(int argc, char *argv[]) {
 	int ok = 1, i, opt, xdev = 0;
 	rlim_t maxfiles;
 	struct rlimit limit;
 	matcher_flags flags = 0;
 	link_flags lf = 0;
-	char *argrmdr;
 	enum {
 		LIST_DUPS_MODE,
 		HARD_LINK_MODE,
@@ -135,32 +170,10 @@ int main(int argc, char *argv[]) {
 			lf &= LINKS_PRESERVE;
 			break;
 		case 's':
-			if (*optarg == '\0') {
+			if (parse_bounds(&bounds,optarg)) {
 				help(argv[0]);
 				return 2;
 			}
-			lower_boundary = strtoll(optarg,&argrmdr,10);
-			if (strchr(",KMGTPE",*argrmdr) == NULL) {
-				fprintf(stderr,"Unexpected character %c in string to -s\n",*argrmdr);
-				help(argv[0]);
-				return 2;
-			}
-			if (*argrmdr != '\0' && *argrmdr != ',')
-				lower_boundary = adjust_suffix(lower_boundary,*argrmdr++);
-			if (*argrmdr == ',') argrmdr++;
-			if (*argrmdr == '\0') break;
-
-			has_upper_boundary = 1;
-			optarg = argrmdr;
-			upper_boundary = strtoll(optarg,&argrmdr,10);
-
-			if (strchr("KMGTPE",*argrmdr) == NULL) {
-				fprintf(stderr,"Unexpected character %c in string to -s\n",*argrmdr);
-				help(argv[0]);
-				return 2;
-			}
-
-			if (*argrmdr != '\0') upper_boundary = adjust_suffix(upper_boundary,*argrmdr);
 			break;
 		case 'v':
 			verbose = 1;

@@ -67,7 +67,7 @@ enum {
 	HAS_SHORT_HASH = 1,
 	HAS_FULL_HASH = 2,
 	SHORT_HASH_SIZE = 16*1024*1024,
-	BUFSIZE = 16*1024,
+	BUFSIZE = 16*1024
 };
 
 /* hack: qsort does not allow an extra parameter so we instead store the

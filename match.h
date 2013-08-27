@@ -22,8 +22,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE. */
 
-#ifndef FIND_H
-#define FIND_H
+#ifndef MATCH_H
+#define MATCH_H
 
 typedef enum {
 	M_LINK  = 0x01, /* Are hardlinks to the same file distinct? */
@@ -32,7 +32,7 @@ typedef enum {
 	M_DEV   = 0x08, /* Are equal files on different devices distinct? */
 	M_MODE  = 0x10, /* Are files with different access modes distint? */
 	M_UID   = 0x20, /* Are files owned by different users distinct? */
-	M_GID   = 0x40, /* Are files owned by differed groups distinct? */
+	M_GID   = 0x40  /* Are files owned by differed groups distinct? */
 } matcher_flags;
 
 /* returns NULL on error with errno set appropriately */
@@ -47,4 +47,4 @@ const char *next_group(struct matcher*);
 const char *next_file(struct matcher*);
 void free_matcher(struct matcher*);
 
-#endif /* FIND_H */
+#endif /* MATCH_H */

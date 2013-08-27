@@ -11,47 +11,46 @@ SYNOPSIS
 
 
 DESCRIPTION
-       fdup  traverses the supplied directories and finds file with equal con‐
-       tents. fdup outputs statistics to  stderr(3)  while  processing  files.
-       fdup will not follow symbolic links it encounters.
+       fdup traverses the supplied directories and finds files with equal con‐
+       tents. fdup will not follow symbolic links it encounters.
 
 
 OPTIONS
-       This  utility  has four modes of operation. These are selected with the
-       options -B, -H, -L and -S. If none of  these  options  is  given,  fdup
-       behaves  as  if  -S was selected. If more than one mode of operation is
-       given, only the last mode that was passed counts.
+       This utility has four modes of operation. These are selected  with  the
+       options  -B,  -H, -L and -S. If none of these options is provided, fdup
+       behaves as if -S was selected. If more than one mode  of  operation  is
+       provided, only the last mode that was passed counts.
 
 
-       -B     Turn files with equal contents into btrfs(8) lightweight  copies
-              of  each  other. A lightweight or COW copy shares the underlying
-              disk space with the original file until you change it,  but  has
-              no  other connections to the original file. This mode is prefer‐
-              able where applicable. This option  only  works  on  Linux  with
-              files on btrfs file systems and implies -b d.
+       -B     Turn  files with equal contents into btrfs(8) lightweight copies
+              of each other. A lightweight or COW copy shares  the  underlying
+              disk  space  with the original file until it is altered, but has
+              no other connections to the  original  file.  This  option  only
+              works  on  Linux with files on btrfs file systems and implies -b
+              d.
 
 
-       -H     Turn  each  group of files with equal contents into hardlinks to
+       -H     Turn each group of files with equal contents into  hardlinks  to
               one file. This implies -b dl.
 
 
-       -L     List groups of files with equal  contents,  separated  by  blank
+       -L     List  groups  of  files  with equal contents, separated by blank
               files.
 
 
        -S     Similar to -H, turn each group of files with equal contents into
-              symbolic links to one file. The file that is not turned  into  a
+              symbolic  links  to one file. The file that is not turned into a
               symbolic link is arbitrarily chosen.
 
 
        -b specifier...
-              Control  file matching behavior. specifier is one or more of the
-              following specifiers. By default, fdup considers  all  cases  as
+              Control file matching behavior. specifier is one or more of  the
+              following  specifiers.  By  default, fdup considers all cases as
               duplicate that can be detected as distinct files with the speci‐
               fiers below.
 
 
-              c      Files with different creation times are  considered  dis‐
+              c      Files  with  different creation times are considered dis‐
                      tinct
 
               d      Files on different devices are considered distinct
@@ -60,7 +59,7 @@ OPTIONS
 
               l      Hardlinks to the same file are considered distinct
 
-              m      Files  with  different  modification times are considered
+              m      Files with different modification  times  are  considered
                      distinct
 
               p      Files with different permissions are considered distinct
@@ -68,7 +67,8 @@ OPTIONS
               u      Files owned by different users are considered distinct
 
 
-       -h     Print a brief help.
+       -h     Print  a synopsis of fdup's command line options and then termi‐
+              nate with an exit status of 0.
 
 
        -p     Preserve permissions, ownership, modification and access  times.
@@ -91,7 +91,7 @@ OPTIONS
               behaves as if -s 0 has been given.
 
               Suffixes  K,  M,  G,  T,  P  and  E can be used to specify 1024,
-              1024*1024, 1024*1024*1024 etc. bytes.
+              1024*1024, 1024*1024*1024,... bytes.
 
               This option can speed up operation if you are scanning  a  large
               amount  of  small files but don't care about duplicates in them,
@@ -99,26 +99,30 @@ OPTIONS
               are known not to be duplicates.
 
 
+       -v     Outputs  statistics  to  stderr(3) while processing files. These
+              statistics can be useful as a progress indicator.
+
+
        -x     Stay on one file system. This applies to each supplied directory
               individually.
 
 
 EXIT STATUS
-       fdup terminates with an exit status of 0 on  success.  If  one  of  the
-       operations  fdup performs fails, its exit status is 1. If fdup does not
+       fdup  terminates  with  an  exit  status of 0 on success. If one of the
+       operations fdup performs fails, its exit status is 1. If fdup does  not
        recognize one of the command line options it was called with, it termi‐
        nates with an exit status of 2.
 
 
 BUGS
-       When  using the option -H, fdup is known to have problems when too many
+       When using the option -H, fdup is known to have problems when too  many
        files are considered equal.
 
        Please file bugs at <https://github.com/fuzxxl/fdup/issues>.
 
 
 COPYRIGHT
-       This program, its source code and this  manpage  is  licensed  under  a
+       This  program,  its  source  code  and this manpage is licensed under a
        2-clause BSD license. See file COPYING for details.
 
 

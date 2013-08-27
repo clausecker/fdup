@@ -26,24 +26,20 @@
 #define _XOPEN_SOURCE 700
 #define _FILE_OFFSET_BITS 64
 
-#include <sys/mman.h>
+#include <ftw.h>
 #include <sys/resource.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <libgen.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ftw.h>
+#include <unistd.h>
 
 #include <openssl/sha.h>
 
-#include "btrfs.h"
 #include "match.h"
+#include "action.h"
+#include "btrfs.h"
 
 /* these variables have to be global as it is not possible to supply an extra
  * argument to the function passed to nftw. The only way to supply extra data
@@ -54,13 +50,8 @@ static off_t upper_boundary = 0;
 static int has_upper_boundary = 0;
 static int verbose = 0;
 
-typedef int link_func(const char*,const char*);
-
 static off_t adjust_suffix(off_t,char);
 static void help(const char *);
-static int make_links(struct matcher*,int,link_func);
-static int perform_link(link_func,const char*,const char*,int);
-static int print_dups(struct matcher*);
 static int walker(const char*,const struct stat*,int,struct FTW*);
 
 static int walker(const char *fpath,const struct stat *sb,int tf,struct FTW *ftwbuf) {
@@ -75,137 +66,6 @@ static int walker(const char *fpath,const struct stat *sb,int tf,struct FTW *ftw
 	if (register_file(matcher,fpath,sb)) return 1;
 
 	if (verbose) fprintf(stderr,"\r%9d files",get_file_count(matcher));
-
-	return 0;
-}
-
-static int print_dups(struct matcher *m) {
-	int first = 1;
-	const char *file;
-
-	while ((file = next_group(m))) {
-		if (first) first = 0;
-		else printf("\n");
-
-		puts(file);
-
-		while ((file = next_file(m))) puts(file);
-	}
-
-	return 0;
-}
-
-static int perform_link(
-	link_func do_link,
-	const char *old,
-	const char *new,
-	int preserve) {
-
-	char *tmp, *new_dup;
-	int len;
-	struct stat newstat;
-	struct timespec timespecs[2];
-
-	new_dup = strdup(new);
-	if (new_dup == NULL) {
-		perror("malloc failed");
-		return 1;
-	}
-
-	/* /fdup.##########.tmp where ########## refers to the pid */
-	len = strlen(new_dup) + 21;
-
-	tmp = malloc(len);
-	if (tmp == NULL) {
-		perror("malloc failed");
-		return 1;
-	}
-
-	snprintf(tmp,len,"%s/fdup.%010d.tmp",dirname(new_dup),getpid());
-	free(new_dup);
-
-	if (do_link(old,tmp) == -1) {
-		fprintf(stderr,"Cannot link %s to %s: ",old,tmp);
-		perror(NULL);
-		free(tmp);
-		return -1;
-	}
-
-	if (stat(new,&newstat) == -1) {
-		fprintf(stderr,"Cannot call stat on %s: ",new);
-		perror(NULL);
-		free(tmp);
-		return -1;
-	}
-
-	/* call utimes first as chmod and chown may disallow this */
-	timespecs[0].tv_sec = newstat.st_atime;
-	timespecs[0].tv_nsec = 0;
-	timespecs[1].tv_sec = newstat.st_mtime;
-	timespecs[1].tv_nsec = 0;
-
-	if (utimensat(AT_FDCWD,tmp,timespecs,AT_SYMLINK_NOFOLLOW) == -1) {
-		fprintf(stderr,
-			"Cannot set modification and access times of file %s.\n"
-			"Times on file %s will be clobbered: ",tmp,new);
-		perror(NULL);
-		if (preserve) {
-			free(tmp);
-			return -1;
-		}
-	}
-
-	/* permissions and ownership do not make sense on symbolic links */
-	if (do_link == symlink) goto skip_preservation;
-
-	if (chmod(tmp,newstat.st_mode) == -1) {
-		fprintf(stderr,
-			"Cannot set permission of file %s.\n"
-			"Permission of file %s will be clobbered: ",tmp,new);
-		perror(NULL);
-		if (preserve) {
-			free(tmp);
-			return -1;
-		}
-	}
-
-	if (chown(tmp,newstat.st_uid,newstat.st_gid) == -1) {
-		fprintf(stderr,
-			"Cannot set ownership of file %s.\n"
-			"Ownership of file %s will be clobbered: ",tmp,new);
-		perror(NULL);
-		if (preserve) {
-			free(tmp);
-			return -1;
-		}
-	}
-
-	skip_preservation:
-
-	if (rename(tmp,new) == -1) {
-		fprintf(stderr,"Cannot rename %s to %s: ",tmp,new);
-		perror(NULL);
-		free(tmp);
-		return -1;
-	}
-
-	free(tmp);
-	return 0;
-}
-
-static int make_links(struct matcher *m, int preserve, link_func f) {
-	const char *orig, *dup;
-	int link_count = 0, pair_count = 0;
-
-	while ((orig = next_group(m))) {
-		pair_count++;
-		while ((dup = next_file(m))) {
-			link_count++;
-			if (perform_link(f,orig,dup,preserve)) return 1;
-			if (verbose) fprintf(stderr,
-				"\rMade %9d links for %9d groups",link_count,pair_count);
-		}
-	}
 
 	return 0;
 }
@@ -228,11 +88,11 @@ static off_t adjust_suffix(off_t n, char suffix) {
 }
 
 int main(int argc, char *argv[]) {
-	int ok=1,i,opt;
+	int ok = 1, i, opt, xdev = 0;
 	rlim_t maxfiles;
 	struct rlimit limit;
 	matcher_flags flags = 0;
-	int xdev = 0, preserve = 0;
+	link_flags lf = 0;
 	char *argrmdr;
 	enum {
 		LIST_DUPS_MODE,
@@ -272,7 +132,7 @@ int main(int argc, char *argv[]) {
 			}
 			break;
 		case 'p':
-			preserve = 1;
+			lf &= LINKS_PRESERVE;
 			break;
 		case 's':
 			if (*optarg == '\0') {
@@ -304,6 +164,7 @@ int main(int argc, char *argv[]) {
 			break;
 		case 'v':
 			verbose = 1;
+			lf &= LINKS_VERBOSE;
 			break;
 		case 'x':
 			xdev = 1;
@@ -341,9 +202,9 @@ int main(int argc, char *argv[]) {
 
 	switch (mode) {
 	case LIST_DUPS_MODE:  ok = print_dups(matcher); break;
-	case HARD_LINK_MODE:  ok = make_links(matcher,preserve,link); break;
-	case SOFT_LINK_MODE:  ok = make_links(matcher,preserve,symlink); break;
-	case BTRFS_COPY_MODE: ok = make_links(matcher,preserve,btrfs_clone); break;
+	case HARD_LINK_MODE:  ok = make_links(matcher,lf,link,"hardlink"); break;
+	case SOFT_LINK_MODE:  ok = make_links(matcher,lf,symlink,"symlink"); break;
+	case BTRFS_COPY_MODE: ok = make_links(matcher,lf,btrfs_clone,"clone"); break;
 	}
 
 	if (!ok) return 1;

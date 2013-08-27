@@ -26,188 +26,57 @@
 #define _XOPEN_SOURCE 700
 #define _FILE_OFFSET_BITS 64
 
-#include <sys/mman.h>
+#include <ftw.h>
 #include <sys/resource.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <libgen.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ftw.h>
+#include <unistd.h>
 
 #include <openssl/sha.h>
 
-#include "btrfs.h"
 #include "match.h"
+#include "action.h"
+#include "btrfs.h"
 
-static enum {
-	LIST_DUPS_MODE,
-	HARD_LINK_MODE,
-	SOFT_LINK_MODE,
-	BTRFS_COPY_MODE
-} operation_mode = LIST_DUPS_MODE;
+struct bounds {
+	off_t lower;
+	off_t upper;
+	int has_upper;
+};
 
-static struct matcher *m;
-static off_t lower_boundary = 0;
-static off_t upper_boundary = 0;
-static int has_upper_boundary = 0;
+/* these variables have to be global as it is not possible to supply an extra
+ * argument to the function passed to nftw. The only way to supply extra data
+ * to walker are in fact global variables. */
+static struct matcher *matcher;
+static struct bounds bounds = { 0, 0, 0 };
+static int verbose = 0;
 
-static int print_walker(const char *fpath,const struct stat *sb,int tf,struct FTW *ftwbuf) {
+static off_t adjust_suffix(off_t,char);
+static void help(const char *);
+static int parse_bounds(struct bounds*,const char*);
+static int walker(const char*,const struct stat*,int,struct FTW*);
 
+static int walker(const char *fpath,const struct stat *sb,int tf,struct FTW *ftwbuf) {
 	/* silence warnings */
 	(void)tf;
 	(void)ftwbuf;
 
 	if (!S_ISREG(sb->st_mode)) return 0;
-	if (sb->st_size < lower_boundary) return 0;
-	if (has_upper_boundary && sb->st_size > upper_boundary) return 0;
+	if (sb->st_size < bounds.lower) return 0;
+	if (bounds.has_upper && sb->st_size > bounds.upper) return 0;
 
-	if (register_file(m,fpath,sb)) return 1;
+	if (register_file(matcher,fpath,sb)) return 1;
 
-	fprintf(stderr,"\r%9d files",get_file_count(m));
-
-	return 0;
-}
-
-static int print_dups(struct matcher *m) {
-	int first = 1;
-	const char *file;
-
-	while ((file = next_group(m))) {
-		if (first) first = 0;
-		else printf("\n");
-
-		puts(file);
-
-		while ((file = next_file(m))) puts(file);
-	}
-
-	return 0;
-}
-
-typedef int link_func(const char*,const char*);
-
-static int perform_link(
-	link_func do_link,
-	const char *old,
-	const char *new,
-	int preserve) {
-
-	char *tmp, *new_dup;
-	int len;
-	struct stat newstat;
-	struct timespec timespecs[2];
-
-	new_dup = strdup(new);
-	if (new_dup == NULL) {
-		perror("malloc failed");
-		return 1;
-	}
-
-	/* /fdup.##########.tmp where ########## refers to the pid */
-	len = strlen(new_dup) + 21;
-
-	tmp = malloc(len);
-	if (tmp == NULL) {
-		perror("malloc failed");
-		return 1;
-	}
-
-	snprintf(tmp,len,"%s/fdup.%010d.tmp",dirname(new_dup),getpid());
-	free(new_dup);
-
-	if (do_link(old,tmp) == -1) {
-		fprintf(stderr,"Cannot link %s to %s: ",old,tmp);
-		perror(NULL);
-		free(tmp);
-		return -1;
-	}
-
-	if (stat(new,&newstat) == -1) {
-		fprintf(stderr,"Cannot call stat on %s: ",new);
-		perror(NULL);
-		free(tmp);
-		return -1;
-	}
-
-	/* call utimes first as chmod and chown may disallow this */
-	timespecs[0].tv_sec = newstat.st_atime;
-	timespecs[0].tv_nsec = 0;
-	timespecs[1].tv_sec = newstat.st_mtime;
-	timespecs[1].tv_nsec = 0;
-
-	if (utimensat(AT_FDCWD,tmp,timespecs,AT_SYMLINK_NOFOLLOW) == -1) {
-		fprintf(stderr,
-			"Cannot set modification and access times of file %s.\n"
-			"Times on file %s will be clobbered: ",tmp,new);
-		perror(NULL);
-		if (preserve) {
-			free(tmp);
-			return -1;
-		}
-	}
-
-	/* permissions and ownership do not make sense on symbolic links */
-	if (do_link == symlink) goto skip_preservation;
-
-	if (chmod(tmp,newstat.st_mode) == -1) {
-		fprintf(stderr,
-			"Cannot set permission of file %s.\n"
-			"Permission of file %s will be clobbered: ",tmp,new);
-		perror(NULL);
-		if (preserve) {
-			free(tmp);
-			return -1;
-		}
-	}
-
-	if (chown(tmp,newstat.st_uid,newstat.st_gid) == -1) {
-		fprintf(stderr,
-			"Cannot set ownership of file %s.\n"
-			"Ownership of file %s will be clobbered: ",tmp,new);
-		perror(NULL);
-		if (preserve) {
-			free(tmp);
-			return -1;
-		}
-	}
-
-	skip_preservation:
-
-	if (rename(tmp,new) == -1) {
-		fprintf(stderr,"Cannot rename %s to %s: ",tmp,new);
-		perror(NULL);
-		free(tmp);
-		return -1;
-	}
-
-	free(tmp);
-	return 0;
-}
-
-static int make_links(struct matcher *m, int preserve, link_func f) {
-	const char *orig, *dup;
-	int link_count = 0, pair_count = 0;
-
-	while ((orig = next_group(m))) {
-		pair_count++;
-		while ((dup = next_file(m))) {
-			link_count++;
-			if (perform_link(f,orig,dup,preserve)) return 1;
-			fprintf(stderr,"\rMade %9d links for %9d groups",link_count,pair_count);
-		}
-	}
+	if (verbose) fprintf(stderr,"\r%9d files",get_file_count(matcher));
 
 	return 0;
 }
 
 static void help(const char *program) {
-	printf("Usage: %s [-B | -H | -L | -S] [-hpx] [-b cdglmpu] [-s n[,m]] directory...\n",program);
+	printf("Usage: %s [-B | -H | -L | -S] [-hpvx] [-b cdglmpu] [-s n[,m]] directory...\n",program);
 }
 
 /* apply kilo, mega, giga etc. suffix */
@@ -220,34 +89,67 @@ static off_t adjust_suffix(off_t n, char suffix) {
 	case 'P': return n << 50;
 	case 'E': return n << 60;
 	default: return n;
+	}
 }
+
+static int parse_bounds(struct bounds *b, const char *input) {
+	char *rest;
+
+	if (*input == '\0') return 1;
+
+	b->lower = strtoll(input,&rest,10);
+	if (strchr(",KMGTPE",*rest) == NULL) {
+		fprintf(stderr,"Unexpected character %c in string to -s\n",*rest);
+		return 1;
+	}
+	if (*rest != '\0' && *rest != ',') b->lower = adjust_suffix(b->lower,*rest++);
+	if (*rest == ',') rest++;
+	if (*rest == '\0') {
+		b->has_upper = 0;
+		return 0;
+	}
+
+	b->has_upper = 1;
+	input = rest;
+	b->upper = strtoll(input,&rest,10);
+
+	if (strchr("KMGTPE",*rest) == NULL) {
+		fprintf(stderr,"Unexpected character %c in string to -s\n",*rest);
+		return 1;
+	}
+
+	if (*rest != '\0') b->upper = adjust_suffix(b->upper,*rest);
+
+	return 0;
 }
 
 int main(int argc, char *argv[]) {
-	int ok=1,i,opt;
+	int ok = 1, i, opt, xdev = 0;
 	rlim_t maxfiles;
 	struct rlimit limit;
 	matcher_flags flags = 0;
-	int xdev = 0, preserve = 0;
-	char *argrmdr;
+	link_flags lf = 0;
+	enum {
+		LIST_DUPS_MODE,
+		HARD_LINK_MODE,
+		SOFT_LINK_MODE,
+		BTRFS_COPY_MODE
+	} mode = LIST_DUPS_MODE;
 
-	while ((opt = getopt(argc,argv,"BHLSb:hps:x")) != -1) {
+	while ((opt = getopt(argc,argv,"BHLSb:hps:vx")) != -1) {
 		switch(opt) {
 		case 'B':
-			operation_mode = BTRFS_COPY_MODE;
+			mode = BTRFS_COPY_MODE;
 			break;
 		case 'H':
-			operation_mode = HARD_LINK_MODE;
+			mode = HARD_LINK_MODE;
 			flags |= M_DEV|M_LINK; /* avoid a quirk in rename */
 			break;
 		case 'L':
-			operation_mode = LIST_DUPS_MODE;
+			mode = LIST_DUPS_MODE;
 			break;
 		case 'S':
-			operation_mode = SOFT_LINK_MODE;
-			break;
-		case 'x':
-			xdev = 1;
+			mode = SOFT_LINK_MODE;
 			break;
 		case 'b':
 			optarg--;
@@ -265,35 +167,20 @@ int main(int argc, char *argv[]) {
 			}
 			break;
 		case 'p':
-			preserve = 1;
+			lf &= LINKS_PRESERVE;
 			break;
 		case 's':
-			if (*optarg == '\0') {
+			if (parse_bounds(&bounds,optarg)) {
 				help(argv[0]);
 				return 2;
 			}
-			lower_boundary = strtoll(optarg,&argrmdr,10);
-			if (strchr(",KMGTPE",*argrmdr) == NULL) {
-				fprintf(stderr,"Unexpected character %c in string to -s\n",*argrmdr);
-				help(argv[0]);
-				return 2;
-			}
-			if (*argrmdr != '\0' && *argrmdr != ',')
-				lower_boundary = adjust_suffix(lower_boundary,*argrmdr++);
-			if (*argrmdr == ',') argrmdr++;
-			if (*argrmdr == '\0') break;
-
-			has_upper_boundary = 1;
-			optarg = argrmdr;
-			upper_boundary = strtoll(optarg,&argrmdr,10);
-
-			if (strchr("KMGTPE",*argrmdr) == NULL) {
-				fprintf(stderr,"Unexpected character %c in string to -s\n",*argrmdr);
-				help(argv[0]);
-				return 2;
-			}
-
-			if (*argrmdr != '\0') upper_boundary = adjust_suffix(upper_boundary,*argrmdr);
+			break;
+		case 'v':
+			verbose = 1;
+			lf &= LINKS_VERBOSE;
+			break;
+		case 'x':
+			xdev = 1;
 			break;
 		case 'h':
 		default:
@@ -307,35 +194,35 @@ int main(int argc, char *argv[]) {
 		return 2;
 	}
 
-	m = new_matcher(flags);
+	matcher = new_matcher(flags);
 
 	/* attempt to use as many files as possible */
 	getrlimit(RLIMIT_NOFILE,&limit);
 	maxfiles = limit.rlim_cur - 8; /* spare some file descriptors */
 
-	fputs("Scanning file system...\n",stderr);
+	if (verbose) fputs("Scanning file system...\n",stderr);
 
 	for (i = optind; i < argc; i++) {
-		ok = nftw(argv[i],print_walker,maxfiles,FTW_PHYS|(xdev?FTW_MOUNT:0));
+		ok = nftw(argv[i],walker,maxfiles,FTW_PHYS|(xdev?FTW_MOUNT:0));
 		if (ok == -1) {
 			fprintf(stderr,"\nError processing argument %s: ",argv[i]);
 			perror(NULL);
 		}
 	}
 
-	fputs("\nLooking for duplicates...\n",stderr);
-	if (finalize_matcher(m)) return 1;
+	if (verbose) fputs("\nLooking for duplicates...\n",stderr);
+	if (finalize_matcher(matcher)) return 1;
 
-	switch (operation_mode) {
-	case LIST_DUPS_MODE:  ok = print_dups(m); break;
-	case HARD_LINK_MODE:  ok = make_links(m,preserve,link); break;
-	case SOFT_LINK_MODE:  ok = make_links(m,preserve,symlink); break;
-	case BTRFS_COPY_MODE: ok = make_links(m,preserve,btrfs_clone); break;
+	switch (mode) {
+	case LIST_DUPS_MODE:  ok = print_dups(matcher); break;
+	case HARD_LINK_MODE:  ok = make_links(matcher,lf,link,"hardlink"); break;
+	case SOFT_LINK_MODE:  ok = make_links(matcher,lf,symlink,"symlink"); break;
+	case BTRFS_COPY_MODE: ok = make_links(matcher,lf,btrfs_clone,"clone"); break;
 	}
 
 	if (!ok) return 1;
 
-	free_matcher(m);
+	free_matcher(matcher);
 
 	return 0;
 }

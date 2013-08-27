@@ -34,7 +34,7 @@ NROFF=nroff
 GIT=git
 CC?=gcc
 
-OBJ=btrfs.o fdup.o match.o
+OBJ=action.o btrfs.o fdup.o match.o
 
 all: fdup
 

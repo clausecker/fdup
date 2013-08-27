@@ -50,7 +50,10 @@ int btrfs_clone(const char *old, const char *new) {
 	/* figure out whether both files are on the same file system and whether
 	 * the file system is actually a btrfs */
 	if (statfs(old,&fs_stat) == -1) return -1;
-	if (fs_stat.f_type != BTRFS_SUPER_MAGIC) return -1;
+	if (fs_stat.f_type != BTRFS_SUPER_MAGIC) {
+		errno = EPERM;
+		return -1;
+	}
 
 	if (stat(old,&old_stat) == -1) return -1;
 

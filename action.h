@@ -22,29 +22,16 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE. */
 
-#ifndef MATCH_H
-#define MATCH_H
+#ifndef ACTION_H
+#define ACTION_H
 
+typedef int link_func(const char*,const char*);
 typedef enum {
-	M_LINK  = 0x01, /* Are hardlinks to the same file distinct? */
-	M_CTIME = 0x02, /* Are files with distinct creation time distinct? */
-	M_MTIME = 0x04, /* Are files with distinct modification time distinct? */
-	M_DEV   = 0x08, /* Are equal files on different devices distinct? */
-	M_MODE  = 0x10, /* Are files with different access modes distint? */
-	M_UID   = 0x20, /* Are files owned by different users distinct? */
-	M_GID   = 0x40  /* Are files owned by differed groups distinct? */
-} matcher_flags;
+	LINKS_PRESERVE = 0x1,
+	LINKS_VERBOSE  = 0x2
+} link_flags;
 
-/* returns NULL on error with errno set appropriately */
-struct matcher *new_matcher(matcher_flags);
-/* these function return 0 on success */
-int register_file(struct matcher*,const char*,const struct stat*);
-int get_file_count(struct matcher*);
-int finalize_matcher(struct matcher*);
-/* return NULL if there is no next file in this group or no next group or 
- * on error. next_group returns the first file in said group. */
-const char *next_group(struct matcher*);
-const char *next_file(struct matcher*);
-void free_matcher(struct matcher*);
+int make_links(struct matcher*,link_flags,link_func,const char*);
+int print_dups(struct matcher*);
 
-#endif /* MATCH_H */
+#endif /* ACTION_H */

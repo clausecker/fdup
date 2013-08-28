@@ -1,0 +1,11 @@
+Version 2 (2013-08-28)
+
+ * Add installation instructions
+ * Do not put git specific files in tarballs
+ * Move source files into src directory
+ * Rework source tarball rule
+ * Add license text to fdup.1
+
+Version 1 (2013-08-27)
+
+ * Initial release

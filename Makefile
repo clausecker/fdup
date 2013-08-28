@@ -25,7 +25,8 @@ LFS_CFLAGS=$(shell getconf LFS_CFLAGS)
 LFS_LDFLAGS=$(shell getconf LFS_LDFLAGS)
 LFS_LIBS=$(shell getconf LFS_LIBS)
 
-REVISION=$(shell git rev-parse --short HEAD)
+REVISION=$(shell git describe --always)
+SRCDIR=fdup-$(REVISION)
 
 LDLIBS=$(LFS_LIBS) -lcrypto
 LDFLAGS=$(LFS_LDFLAGS)
@@ -38,6 +39,8 @@ OBJ=action.o btrfs.o fdup.o match.o
 
 all: fdup
 
+tarball: $(SRCDIR).tar.gz
+
 fdup: $(OBJ)
 
 .PHONY: all clean
@@ -49,5 +52,8 @@ README: fdup.1
 	$(NROFF) -man fdup.1 | col -bx >$@
 
 # HEAD gets updated whenever git revision changes
-fdup.tar: .git/HEAD
-	$(GIT) archive --prefix=fdup-$(REVISION)/ --format=tar -o $@ HEAD
+$(SRCDIR).tar: .git/HEAD
+	$(GIT) archive --prefix=$(SRCDIR)/ -o $@ HEAD
+
+$(SRCDIR).tar.gz: .git/HEAD
+	$(GIT) archive --prefix=$(SRCDIR)/ -o $@ HEAD

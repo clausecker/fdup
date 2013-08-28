@@ -21,49 +21,20 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-COL=col
-CP=cp
-GIT=git
-INSTALL=install
-MKDIR=mkdir -p
-NROFF=nroff
+LFS_CFLAGS=$(shell getconf LFS_CFLAGS)
+LFS_LDFLAGS=$(shell getconf LFS_LDFLAGS)
+LFS_LIBS=$(shell getconf LFS_LIBS)
 
-REVISION=$(shell git describe --always)
-SRCDIR=fdup-$(REVISION)
+LDLIBS=$(LFS_LIBS) -lcrypto
+LDFLAGS=$(LFS_LDFLAGS)
+CFLAGS=$(LFS_CFLAGS) -O3 -Wall -Wextra -pedantic -std=c99
+CC=gcc
 
-PREFIX?=/usr/local
+OBJ=action.o btrfs.o fdup.o match.o
 
-all: build
+fdup: $(OBJ)
 
-tarball: $(SRCDIR).tar.gz
+clean:
+	$(RM) *.o *.s *~ fdup
 
-clean: src/clean
-	$(RM) -r proto
-	$(RM) $(SRCDIR).tar $(SRCDIR).tar.gz
-
-build: src/fdup fdup.1
-	$(MKDIR) proto/bin
-	$(CP) src/fdup proto/bin
-	$(MKDIR) proto/share/man/man1
-	$(CP) fdup.1 proto/share/man/man1
-
-install: build
-	$(INSTALL) -d $(PREFIX)/bin
-	$(INSTALL) proto/bin/fdup $(PREFIX)/bin
-	$(INSTALL) -d $(PREFIX)/share/man/man1
-	$(INSTALL) -m 0644 proto/share/man/man1/fdup.1 $(PREFIX)/share/man/man1/fdup.1
-
-src/%:
-	$(MAKE) -C $(dir $@) $(notdir $@)
-
-README: fdup.1
-	$(NROFF) -man fdup.1 | $(COL) -bx >$@
-
-# HEAD gets updated whenever git revision changes
-$(SRCDIR).tar: .git/HEAD
-	$(GIT) archive --prefix=$(SRCDIR)/ -o $@ HEAD
-
-$(SRCDIR).tar.gz: .git/HEAD
-	$(GIT) archive --prefix=$(SRCDIR)/ -o $@ HEAD
-
-.PHONY: all clean build install
+.PHONY: clean

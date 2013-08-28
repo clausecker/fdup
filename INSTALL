@@ -1,0 +1,18 @@
+In order to build fdup, tweak the settings in src/Makefile and then call
+
+	make all
+
+in the top-level directory. This creates a directory proto which contains all
+the files that will later be installed. Next, you can install fdup with
+
+	make PREFIX=### install
+
+where PREFIX is the pefix fdup will be installed to. If no PREFIX is given, it
+defaults to /usr/local.
+
+To create a source tarball for redistribution from the git repository, call
+
+	make tarball
+
+this generates a source tarball named fdup-###.tar.gz where ### is a string
+describing the version of fdup bundled in the tarball.

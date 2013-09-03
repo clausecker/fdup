@@ -32,9 +32,19 @@ CC=gcc
 
 OBJ=action.o btrfs.o fdup.o match.o
 
-fdup: $(OBJ)
+build: fdup
 
 clean:
-	$(RM) *.o *.s *~ fdup
+	@echo " RM " $(OBJ) fdup && $(RM) $(OBJ) fdup
 
-.PHONY: clean
+fdup: $(OBJ)
+
+.c.o:
+	@echo " CC " $@
+	@$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
+
+.o:
+	@echo " LD " $@
+	@$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+.PHONY: build clean

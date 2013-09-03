@@ -24,6 +24,7 @@
 COL=col
 CP=cp
 GIT=git
+GZIP=gzip -9
 INSTALL=install
 MKDIR=mkdir -p
 NROFF=nroff
@@ -38,32 +39,36 @@ all: build
 tarball: $(SRCDIR).tar.gz
 
 clean: src/clean
-	$(RM) -r proto
-	$(RM) $(SRCDIR).tar $(SRCDIR).tar.gz
+	@echo " RM " proto && $(RM) -r proto
+	@echo " RM " $(SRCDIR).tar && $(RM) $(SRCDIR).tar
+	@echo " RM " $(SRCDIR).tar.gz && $(RM) $(SRCDIR).tar.gz
 
-build: src/fdup fdup.1
-	$(MKDIR) proto/bin
-	$(CP) src/fdup proto/bin
-	$(MKDIR) proto/share/man/man1
-	$(CP) fdup.1 proto/share/man/man1
+build: src/build fdup.1
+	@echo Populating proto directory...
+	@$(MKDIR) proto/bin
+	@$(CP) src/fdup proto/bin
+	@$(MKDIR) proto/share/man/man1
+	@$(CP) fdup.1 proto/share/man/man1
 
 install: build
-	$(INSTALL) -d $(PREFIX)/bin
-	$(INSTALL) proto/bin/fdup $(PREFIX)/bin
-	$(INSTALL) -d $(PREFIX)/share/man/man1
-	$(INSTALL) -m 0644 proto/share/man/man1/fdup.1 $(PREFIX)/share/man/man1/fdup.1
+	@echo Installing...
+	@$(INSTALL) -d $(PREFIX)/bin
+	@$(INSTALL) proto/bin/fdup $(PREFIX)/bin
+	@$(INSTALL) -d $(PREFIX)/share/man/man1
+	@$(INSTALL) -m 0644 proto/share/man/man1/fdup.1 $(PREFIX)/share/man/man1/fdup.1
 
 src/%:
-	$(MAKE) -C $(dir $@) $(notdir $@)
+	@echo Making `basename $@` in `dirname $@`
+	@cd `dirname $@` && $(MAKE) `basename $@`
 
 README: fdup.1
 	$(NROFF) -man fdup.1 | $(COL) -bx >$@
 
 # HEAD gets updated whenever git revision changes
 $(SRCDIR).tar: .git/HEAD
-	$(GIT) archive --prefix=$(SRCDIR)/ -o $@ HEAD
+	@echo "TAR " $@ && $(GIT) archive --prefix=$(SRCDIR)/ -o $@ HEAD
 
-$(SRCDIR).tar.gz: .git/HEAD
-	$(GIT) archive --prefix=$(SRCDIR)/ -o $@ HEAD
+$(SRCDIR).tar.gz: $(SRCDIR).tar
+	@echo "GZIP" $@ && $(GZIP) $<
 
-.PHONY: all clean build install
+.PHONY: all clean build install src/*

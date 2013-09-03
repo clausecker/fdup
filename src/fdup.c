@@ -35,8 +35,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <openssl/sha.h>
-
 #include "match.h"
 #include "action.h"
 #include "btrfs.h"

@@ -5,3 +5,4 @@ fdup.tar
 *~
 *.bak
 proto
+*.mk

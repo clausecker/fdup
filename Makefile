@@ -29,17 +29,28 @@ INSTALL=install
 MKDIR=mkdir -p
 NROFF=nroff
 
-REVISION=$(shell git describe --always)
-SRCDIR=fdup-$(REVISION)
-
 PREFIX?=/usr/local
 
 all: build
+
+git.mk:
+	@echo "GIT " $@
+	@if [ -d .git ] ; then \
+		echo REVISION=`git describe --always` >$@ ; \
+	else \
+		echo "Repository not available. Will not be able to make tarballs." ; \
+		echo REVISION= >$@ ; \
+	fi
+
+include git.mk
+
+SRCDIR=fdup-$(REVISION)
 
 tarball: $(SRCDIR).tar.gz
 
 clean: src/clean
 	@echo " RM " proto && $(RM) -r proto
+	@echo " RM " git.mk && $(RM) git.mk
 	@echo " RM " $(SRCDIR).tar && $(RM) $(SRCDIR).tar
 	@echo " RM " $(SRCDIR).tar.gz && $(RM) $(SRCDIR).tar.gz
 
@@ -65,7 +76,11 @@ README: fdup.1
 	$(NROFF) -man fdup.1 | $(COL) -bx >$@
 
 # HEAD gets updated whenever git revision changes
-$(SRCDIR).tar: .git/HEAD
+$(SRCDIR).tar:
+	@if [ ! $(REVISION) ] ; then \
+		echo "Cannot make tarball without git repository." ; \
+		exit 1 ; \
+	fi
 	@echo "TAR " $@ && $(GIT) archive --prefix=$(SRCDIR)/ -o $@ HEAD
 
 $(SRCDIR).tar.gz: $(SRCDIR).tar

@@ -1,5 +1,8 @@
 fdup
-fdup.tar
+*.tar
+*.gz
+*.bz2
+*.xz
 *.o
 *.s
 *~

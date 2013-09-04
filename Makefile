@@ -81,9 +81,9 @@ $(SRCDIR).tar:
 		echo "Cannot make tarball without git repository." ; \
 		exit 1 ; \
 	fi
-	@echo "TAR " $@ && $(GIT) archive --prefix=$(SRCDIR)/ -o $@ HEAD
+	@echo "TAR " $@ && $(GIT) archive --prefix=$(SRCDIR)/ HEAD >$@
 
 $(SRCDIR).tar.gz: $(SRCDIR).tar
-	@echo "GZIP" $@ && $(GZIP) $<
+	@echo "GZIP" $@ && $(GZIP) $^
 
 .PHONY: all clean build install src/*

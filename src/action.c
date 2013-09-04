@@ -37,6 +37,56 @@
 #include "match.h"
 #include "action.h"
 
+static int copy_attributes(const char*,const char*,int);
+static int perform_link(link_func,const char*,const char*,const char*,int);
+
+/* attempt to transfer file attributes from old to new */
+static int copy_attributes(const char *old, const char *new, int preserve) {
+	struct stat oldstat;
+	struct timespec timespecs[2];
+
+	if (stat(old,&oldstat) == -1) {
+		fprintf(stderr,"Cannot call stat on %s: ",old);
+		perror(NULL);
+		return -1;
+	}
+
+	/* call utimes first as chmod and chown may disallow this */
+	timespecs[0].tv_sec = oldstat.st_atime;
+	timespecs[0].tv_nsec = 0;
+	timespecs[1].tv_sec = oldstat.st_mtime;
+	timespecs[1].tv_nsec = 0;
+
+	if (utimensat(AT_FDCWD,new,timespecs,AT_SYMLINK_NOFOLLOW) == -1) {
+		fprintf(stderr,
+			"Cannot set modification and access times of file %s.\n"
+			"Times on file %s will be clobbered: ",new,old);
+		perror(NULL);
+		if (preserve&1) return -1;
+	}
+
+	/* skip rest in case of symlink */
+	if (preserve&2) return 0;
+
+	if (chmod(new,oldstat.st_mode) == -1) {
+		fprintf(stderr,
+			"Cannot set permission of file %s.\n"
+			"Permission of file %s will be clobbered: ",new,old);
+		perror(NULL);
+		if (preserve&1) return -1;
+	}
+
+	if (chown(new,oldstat.st_uid,oldstat.st_gid) == -1) {
+		fprintf(stderr,
+			"Cannot set ownership of file %s.\n"
+			"Ownership of file %s will be clobbered: ",new,old);
+		perror(NULL);
+		if (preserve&1) return -1;
+	}
+
+	return 0;
+}
+
 static int perform_link(
 	link_func do_link,
 	const char *lf_name,
@@ -46,8 +96,6 @@ static int perform_link(
 
 	char *tmp, *new_dup;
 	int len;
-	struct stat newstat;
-	struct timespec timespecs[2];
 
 	new_dup = strdup(new);
 	if (new_dup == NULL) {
@@ -74,56 +122,15 @@ static int perform_link(
 		return -1;
 	}
 
-	if (stat(new,&newstat) == -1) {
-		fprintf(stderr,"Cannot call stat on %s: ",new);
-		perror(NULL);
+	/* In case of hardlinks, preservation is pointless, as both files point
+	 * to the same inode. Only do this in other modes. For symbolic links,
+	 * set bit 02 in preserve to only preserve access times */
+	preserve = (!!preserve) & (do_link == symlink) << 1;
+
+	if (do_link != link && copy_attributes(new,tmp,preserve) == -1) {
 		free(tmp);
 		return -1;
 	}
-
-	/* call utimes first as chmod and chown may disallow this */
-	timespecs[0].tv_sec = newstat.st_atime;
-	timespecs[0].tv_nsec = 0;
-	timespecs[1].tv_sec = newstat.st_mtime;
-	timespecs[1].tv_nsec = 0;
-
-	if (utimensat(AT_FDCWD,tmp,timespecs,AT_SYMLINK_NOFOLLOW) == -1) {
-		fprintf(stderr,
-			"Cannot set modification and access times of file %s.\n"
-			"Times on file %s will be clobbered: ",tmp,new);
-		perror(NULL);
-		if (preserve) {
-			free(tmp);
-			return -1;
-		}
-	}
-
-	/* permissions and ownership do not make sense on symbolic links */
-	if (do_link == symlink) goto skip_preservation;
-
-	if (chmod(tmp,newstat.st_mode) == -1) {
-		fprintf(stderr,
-			"Cannot set permission of file %s.\n"
-			"Permission of file %s will be clobbered: ",tmp,new);
-		perror(NULL);
-		if (preserve) {
-			free(tmp);
-			return -1;
-		}
-	}
-
-	if (chown(tmp,newstat.st_uid,newstat.st_gid) == -1) {
-		fprintf(stderr,
-			"Cannot set ownership of file %s.\n"
-			"Ownership of file %s will be clobbered: ",tmp,new);
-		perror(NULL);
-		if (preserve) {
-			free(tmp);
-			return -1;
-		}
-	}
-
-	skip_preservation:
 
 	if (rename(tmp,new) == -1) {
 		fprintf(stderr,"Cannot rename %s to %s: ",tmp,new);

@@ -15,4 +15,10 @@ To create a source tarball for redistribution from the git repository, call
 	make tarball
 
 this generates a source tarball named fdup-###.tar.gz where ### is a string
-describing the version of fdup bundled in the tarball.
+describing the version of fdup bundled in the tarball. Alternatively, you can
+generate a binary tarball with one of the commands
+
+	make fdup.tar
+	make fdup.tar.gz
+	make fdup.tar.bz2
+	make fdup.tar.xz

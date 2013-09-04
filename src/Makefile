@@ -21,9 +21,15 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-LFS_CFLAGS=$(shell getconf LFS_CFLAGS)
-LFS_LDFLAGS=$(shell getconf LFS_LDFLAGS)
-LFS_LIBS=$(shell getconf LFS_LIBS)
+build: fdup
+
+lfs.mk:
+	@echo "GETCONF" $@
+	@echo LFS_CFLAGS=`getconf LFS_CFLAGS` >$@
+	@echo LFS_LDFLAGS=`getconf LFS_LDFLAGS` >>$@
+	@echo LFS_LIBS=`getconf LFS_LIBS` >>$@
+
+include lfs.mk
 
 LDLIBS=$(LFS_LIBS) -lcrypto
 LDFLAGS=$(LFS_LDFLAGS)
@@ -32,9 +38,19 @@ CC=gcc
 
 OBJ=action.o btrfs.o fdup.o match.o
 
+clean:
+	@echo "   RM  " fdup && $(RM) fdup
+	@echo "   RM  " $(OBJ) && $(RM) $(OBJ)
+	@echo "   RM  " lfs.mk && $(RM) lfs.mk
+
 fdup: $(OBJ)
 
-clean:
-	$(RM) *.o *.s *~ fdup
+.c.o:
+	@echo "   CC  " $@
+	@$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
-.PHONY: clean
+.o:
+	@echo "   LD  " $@
+	@$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+.PHONY: build clean

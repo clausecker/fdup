@@ -24,7 +24,7 @@
 build: fdup
 
 lfs.mk:
-	@echo " SH " $@
+	@echo "GETCONF" $@
 	@echo LFS_CFLAGS=`getconf LFS_CFLAGS` >$@
 	@echo LFS_LDFLAGS=`getconf LFS_LDFLAGS` >>$@
 	@echo LFS_LIBS=`getconf LFS_LIBS` >>$@
@@ -39,18 +39,18 @@ CC=gcc
 OBJ=action.o btrfs.o fdup.o match.o
 
 clean:
-	@echo " RM " fdup && $(RM) fdup
-	@echo " RM " $(OBJ) && $(RM) $(OBJ)
-	@echo " RM " lfs.mk && $(RM) lfs.mk
+	@echo "   RM  " fdup && $(RM) fdup
+	@echo "   RM  " $(OBJ) && $(RM) $(OBJ)
+	@echo "   RM  " lfs.mk && $(RM) lfs.mk
 
 fdup: $(OBJ)
 
 .c.o:
-	@echo " CC " $@
+	@echo "   CC  " $@
 	@$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
 .o:
-	@echo " LD " $@
+	@echo "   LD  " $@
 	@$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 .PHONY: build clean

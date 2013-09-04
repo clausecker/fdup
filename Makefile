@@ -97,5 +97,7 @@ $(SRCDIR).tar:
 	fi
 	@echo "  GIT  " $@ && $(GIT) archive --prefix=$(SRCDIR)/ HEAD >$@
 
+fdup.tar: build
+	@echo "  TAR  " $@ && $(TAR) -c -C proto bin share >$@
 
 .PHONY: all clean build install src/*

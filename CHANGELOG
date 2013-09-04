@@ -1,3 +1,10 @@
+Version 3 (2013-09-04)
+
+ * Add a SEE ALSO section to fdup.1
+ * Make the building process more fancy
+ * Add rules to generate binary tarballs
+ * Fix a bug were fdup tried to copy attributes of hardlinks to the same file
+
 Version 2 (2013-08-28)
 
  * Add installation instructions

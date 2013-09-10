@@ -35,6 +35,7 @@ LDLIBS=$(LFS_LIBS) -lcrypto
 LDFLAGS=$(LFS_LDFLAGS)
 CFLAGS=$(LFS_CFLAGS) -O3 -Wall -Wextra -pedantic -std=c99
 CC=gcc
+RM=rm -f
 
 OBJ=action.o btrfs.o fdup.o match.o
 

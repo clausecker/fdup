@@ -29,10 +29,16 @@ GZIP=gzip -9 -f
 INSTALL=install
 MKDIR=mkdir -p
 NROFF=nroff
+RM=rm -f
 TAR=tar
 XZ=xz -9 -e -f
 
 PREFIX?=/usr/local
+
+warning:
+	@echo This software is currently BROKEN. Please be careful as it might eat your
+	@echo data. If you want to compile fdup anyway, please run make all.
+	@exit 1
 
 all: build
 

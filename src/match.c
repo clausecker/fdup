@@ -246,12 +246,12 @@ static int cmp_fileinfo(struct fileinfo *a,struct fileinfo *b) {
 	if (f & M_MTIME) CMP_BY(st_mtime);
 	if (f & M_CTIME) CMP_BY(st_ctime);
 
-	if (a->hashed & HAS_SHORT_HASH) {
+	if (~a->hashed & HAS_SHORT_HASH) {
 		file_sha1(a->short_hash,names+a->path,SHORT_HASH_SIZE);
 		a->hashed |= HAS_SHORT_HASH;
 	}
 
-	if (b->hashed & HAS_SHORT_HASH) {
+	if (~b->hashed & HAS_SHORT_HASH) {
 		file_sha1(b->short_hash,names+b->path,SHORT_HASH_SIZE);
 		b->hashed |= HAS_SHORT_HASH;
 	}
@@ -260,12 +260,12 @@ static int cmp_fileinfo(struct fileinfo *a,struct fileinfo *b) {
 
 	if (cmp != 0) return cmp;
 
-	if (a->hashed & HAS_FULL_HASH) {
+	if (~a->hashed & HAS_FULL_HASH) {
 		file_sha1(a->hash,names+a->path,a->stat.st_size);
 		a->hashed |= HAS_FULL_HASH;
 	}
 
-	if (b->hashed & HAS_FULL_HASH) {
+	if (~b->hashed & HAS_FULL_HASH) {
 		file_sha1(b->hash,names+b->path,b->stat.st_size);
 		b->hashed |= HAS_FULL_HASH;
 	}
